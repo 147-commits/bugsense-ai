@@ -626,37 +626,98 @@ Return ONLY valid JSON:
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 9. TEST DATA GENERATOR (NEW!)
+// 9. TEST DATA GENERATOR — Enterprise TDM (Test Data Management)
 // ═══════════════════════════════════════════════════════════════
 export async function generateTestData(scenario: string, options: { count: number; format: 'json' | 'csv' | 'sql' | 'typescript'; includeEdgeCases: boolean; locale?: string }) {
-  const systemPrompt = `You are a test data engineering expert. Generate realistic, diverse test data.
+  const locale = options.locale || 'en-US';
 
-Given a scenario description, generate test data that includes:
-- Valid/happy path data
-- Boundary values (min, max, empty, null)
-${options.includeEdgeCases ? '- Edge cases (unicode, special chars, very long strings, negative numbers, zero, future/past dates)' : ''}
-- Invalid data for negative testing
-- Realistic names, emails, addresses using ${options.locale || 'en-US'} locale
+  const edgeCaseInstruction = options.includeEdgeCases ? `
+EDGE CASE DATA — generate comprehensive edge cases:
+- UNICODE: CJK characters (田中太郎), emoji (👩‍💻), RTL text (عربي), zero-width spaces (\\u200B), combining diacriticals (é vs e\u0301)
+- STRINGS: Empty string "", whitespace-only "   ", null, undefined, extremely long (1000+ chars), single character, string "null", string "undefined", string "0", string "false"
+- NUMBERS: Zero (0), negative (-1), very large (Number.MAX_SAFE_INTEGER), very small (Number.MIN_SAFE_INTEGER), floating point precision (0.1 + 0.2), NaN, Infinity
+- DATES: Leap year Feb 29, DST transition dates, epoch zero (1970-01-01), Unix 2038 boundary (2038-01-19), far future (9999-12-31), midnight exactly, end of day 23:59:59.999
+- INJECTION: SQL injection ("' OR '1'='1'; DROP TABLE users; --"), XSS ("<script>alert('xss')</script>"), path traversal ("../../etc/passwd"), null bytes ("test\\x00data")
+- STATE: Data requiring specific system state (e.g., "user with expired subscription + payment method on file + 3 failed payment attempts")` : '';
 
-Output format: ${options.format}
-Count: ${options.count} records (plus edge cases)
+  const formatInstructions: Record<string, string> = {
+    json: 'Pretty-printed JSON with inline comments (as _comment fields) explaining each edge case',
+    csv: 'CSV with proper header row. Escape special characters (commas, quotes, newlines) correctly. Include a _notes column for edge cases',
+    sql: 'SQL INSERT statements wrapped in BEGIN/COMMIT transaction. Include ON CONFLICT DO NOTHING for idempotency. Use parameterized-style comments for each record explaining its purpose',
+    typescript: 'TypeScript typed constants with interface definitions matching the schema. Export as named constants: VALID_DATA, EDGE_CASE_DATA, INVALID_DATA, BVA_TABLE',
+  };
+
+  const systemPrompt = `You are a principal test data engineer at a Fortune 500 company. Generate production-quality test data following TDM (Test Data Management) best practices.
+
+LOCALE: ${locale} — use locale-appropriate names, addresses, phone formats, date formats.
+
+ABSOLUTE RULES:
+1. DIVERSITY: Never use "John Doe" or "john@example.com". Use diverse names across ethnicities, genders, and name lengths. International formats where locale-appropriate.
+2. REALISTIC DISTRIBUTIONS: Not all ages 25-35, not all countries US/UK. Reflect real-world distributions.
+3. REFERENTIAL INTEGRITY: When generating related records (users + orders), ensure foreign keys match, totals are mathematically consistent, dates are chronologically valid.
+4. NEVER generate real PII — all data must be obviously synthetic but realistic-looking.
+
+REQUIRED SECTIONS:
+
+1. VALID DATA (${options.count} records): Realistic, diverse, locale-appropriate data that should pass all validation.
+
+2. BOUNDARY VALUE ANALYSIS TABLE: For EACH field with constraints, generate a structured BVA table:
+   Each row: { field, min_minus_1: { value, expected: "FAIL" }, min: { value, expected: "PASS" }, min_plus_1: { value, expected: "PASS" }, nominal: { value, expected: "PASS" }, max_minus_1: { value, expected: "PASS" }, max: { value, expected: "PASS" }, max_plus_1: { value, expected: "FAIL" } }
+
+3. EQUIVALENCE PARTITIONS: For EACH field, identify valid and invalid equivalence classes:
+   { field, validClasses: [{ class: "Standard email", representative: "user@domain.com" }], invalidClasses: [{ class: "Missing @ symbol", representative: "userdomain.com", expectedError: "Invalid email format" }] }
+
+${edgeCaseInstruction}
+
+4. INVALID DATA: Records that should FAIL validation. Each must include _expectedError explaining what validation should catch it.
+
+5. DATA MASKING GUIDANCE: For each PII field, recommend the masking technique:
+   - Names: Substitution (replace with synthetic names)
+   - Credit cards: Format-Preserving Encryption (FPE)
+   - SSN/Tax IDs: Tokenization
+   - Passwords: Redaction (never store/display)
+   - Emails: Domain substitution (keep format, replace domain)
+   - Addresses: Generalization (keep city/state, fake street)
+
+6. FORMATTED OUTPUT: The complete dataset in ${formatInstructions[options.format]} format.
 
 Return ONLY valid JSON:
 {
-  "scenario": "What this data is for",
+  "scenario": "Description of what this data is for",
   "schema": {
-    "fields": [{ "name": "fieldName", "type": "string|number|email|date|boolean|enum", "constraints": "any validation rules" }]
+    "fields": [{ "name": "fieldName", "type": "string|number|email|date|boolean|enum", "constraints": "validation rules", "nullable": false, "piiClassification": "PII|Sensitive|Public" }]
   },
-  "validData": [{}],
-  "edgeCaseData": [{ "_note": "why this is an edge case" }],
-  "invalidData": [{ "_note": "why this is invalid", "_expectedError": "expected validation error" }],
-  "formattedOutput": "The data in the requested format (${options.format})",
+  "validData": [{ "field1": "value1" }],
+  "bvaTable": [
+    {
+      "field": "fieldName",
+      "constraint": "2-50 characters",
+      "min_minus_1": { "value": "A", "expected": "FAIL", "reason": "1 char, below min of 2" },
+      "min": { "value": "Ab", "expected": "PASS", "reason": "Exactly 2 chars" },
+      "min_plus_1": { "value": "Abc", "expected": "PASS", "reason": "3 chars, just above min" },
+      "nominal": { "value": "Alexander", "expected": "PASS", "reason": "Typical length" },
+      "max_minus_1": { "value": "49-char string...", "expected": "PASS", "reason": "49 chars" },
+      "max": { "value": "50-char string...", "expected": "PASS", "reason": "Exactly 50 chars" },
+      "max_plus_1": { "value": "51-char string...", "expected": "FAIL", "reason": "51 chars, above max of 50" }
+    }
+  ],
+  "equivalencePartitions": [
+    {
+      "field": "email",
+      "validClasses": [{ "class": "Standard format", "representative": "user@domain.com" }],
+      "invalidClasses": [{ "class": "Missing @", "representative": "userdomain.com", "expectedError": "Invalid email" }]
+    }
+  ],
+  "edgeCaseData": [{ "_note": "Why this is an edge case", "_category": "unicode|injection|boundary|state" }],
+  "invalidData": [{ "_note": "Why this is invalid", "_expectedError": "Expected validation error", "_category": "missing_required|wrong_type|out_of_range|format" }],
+  "dataMasking": [
+    { "field": "name", "piiType": "Personal Name", "technique": "Substitution", "example": "Replace with synthetic name from same locale" }
+  ],
+  "formattedOutput": "Complete dataset in ${options.format} format",
   "totalRecords": 0
-}
+}`;
 
-Generate realistic, diverse data that a QA engineer can immediately use.`;
-
-  const response = await callAI(systemPrompt, `Scenario:\n${scenario}\n\nCount: ${options.count}\nFormat: ${options.format}`);
+  const response = await callAI(systemPrompt, `Scenario:\n${scenario}\n\nRecord Count: ${options.count}\nOutput Format: ${options.format}\nLocale: ${locale}`);
   return extractJSON(response);
 }
 
@@ -1590,8 +1651,109 @@ setup.afterAll(async ({ request }) => {
   if (systemPrompt.includes('release notes')) {
     return JSON.stringify({ version: '2.5.0', date: new Date().toISOString().split('T')[0], title: 'Performance & Bug Fix Release', summary: 'Improved performance and fixed critical bugs', sections: { newFeatures: [{ title: 'Dark mode support', description: 'Full dark mode theme', ticket: 'FEAT-123' }], improvements: [{ title: 'Page load speed', description: '40% faster dashboard loading', ticket: 'PERF-456' }], bugFixes: [{ title: 'Login crash fix', description: 'Fixed SSO crash on OAuth callback', ticket: 'BUG-789', severity: 'critical' }], breakingChanges: [], knownIssues: [] }, markdownOutput: '# Release Notes v2.5.0\n...', slackOutput: '🚀 *v2.5.0 Released!*\n...' });
   }
-  if (systemPrompt.includes('test data')) {
-    return JSON.stringify({ scenario: 'User registration', schema: { fields: [{ name: 'email', type: 'email', constraints: 'unique, valid format' }, { name: 'name', type: 'string', constraints: '2-50 chars' }] }, validData: [{ email: 'john@example.com', name: 'John Doe' }], edgeCaseData: [{ email: 'a@b.co', name: 'Jo', _note: 'Minimum valid length' }], invalidData: [{ email: 'not-an-email', name: '', _note: 'Invalid email format', _expectedError: 'Invalid email' }], formattedOutput: '[]', totalRecords: 3 });
+  if (systemPrompt.includes('principal test data engineer') || systemPrompt.includes('test data')) {
+    return JSON.stringify({
+      scenario: 'User registration form',
+      schema: {
+        fields: [
+          { name: 'name', type: 'string', constraints: '2-50 characters', nullable: false, piiClassification: 'PII' },
+          { name: 'email', type: 'email', constraints: 'unique, RFC 5322 format', nullable: false, piiClassification: 'PII' },
+          { name: 'password', type: 'string', constraints: '8+ chars, 1 upper, 1 number, 1 special', nullable: false, piiClassification: 'Sensitive' },
+          { name: 'age', type: 'number', constraints: '18-120', nullable: true, piiClassification: 'PII' },
+          { name: 'role', type: 'enum', constraints: 'admin|editor|viewer', nullable: false, piiClassification: 'Public' },
+        ],
+      },
+      validData: [
+        { name: 'Aisha Patel', email: 'aisha.patel@techcorp.in', password: 'Str0ng!Pass', age: 28, role: 'editor' },
+        { name: 'Carlos Mendes', email: 'c.mendes@empresa.br', password: 'C@rlos2024!', age: 34, role: 'viewer' },
+        { name: 'Yuki Tanaka', email: 'y.tanaka@company.jp', password: 'Yuk1T@naka!', age: 41, role: 'admin' },
+        { name: 'Fatima Al-Hassan', email: 'fatima.h@corp.ae', password: 'F@tima99!x', age: 26, role: 'editor' },
+        { name: "Siobhán O'Brien", email: 'siobhan.ob@mail.ie', password: "S!obhan_88", age: 55, role: 'viewer' },
+      ],
+      bvaTable: [
+        {
+          field: 'name', constraint: '2-50 characters',
+          min_minus_1: { value: 'A', expected: 'FAIL', reason: '1 char — below minimum of 2' },
+          min: { value: 'Li', expected: 'PASS', reason: 'Exactly 2 chars — minimum boundary' },
+          min_plus_1: { value: 'Ana', expected: 'PASS', reason: '3 chars — just above minimum' },
+          nominal: { value: 'Alexander Kim', expected: 'PASS', reason: '13 chars — typical length' },
+          max_minus_1: { value: 'A'.repeat(49), expected: 'PASS', reason: '49 chars — just below maximum' },
+          max: { value: 'A'.repeat(50), expected: 'PASS', reason: 'Exactly 50 chars — maximum boundary' },
+          max_plus_1: { value: 'A'.repeat(51), expected: 'FAIL', reason: '51 chars — exceeds maximum of 50' },
+        },
+        {
+          field: 'age', constraint: '18-120',
+          min_minus_1: { value: 17, expected: 'FAIL', reason: '17 — below minimum age of 18' },
+          min: { value: 18, expected: 'PASS', reason: 'Exactly 18 — minimum age boundary' },
+          min_plus_1: { value: 19, expected: 'PASS', reason: '19 — just above minimum' },
+          nominal: { value: 35, expected: 'PASS', reason: 'Typical age' },
+          max_minus_1: { value: 119, expected: 'PASS', reason: '119 — just below maximum' },
+          max: { value: 120, expected: 'PASS', reason: 'Exactly 120 — maximum boundary' },
+          max_plus_1: { value: 121, expected: 'FAIL', reason: '121 — exceeds maximum age of 120' },
+        },
+      ],
+      equivalencePartitions: [
+        {
+          field: 'email',
+          validClasses: [
+            { class: 'Standard format', representative: 'user@domain.com' },
+            { class: 'Subdomain', representative: 'user@mail.domain.co.uk' },
+            { class: 'Plus addressing', representative: 'user+tag@domain.com' },
+            { class: 'Numeric local part', representative: '12345@domain.com' },
+          ],
+          invalidClasses: [
+            { class: 'Missing @ symbol', representative: 'userdomain.com', expectedError: 'Invalid email format' },
+            { class: 'Missing domain', representative: 'user@', expectedError: 'Invalid email format' },
+            { class: 'Double @', representative: 'user@@domain.com', expectedError: 'Invalid email format' },
+            { class: 'Spaces in address', representative: 'user name@domain.com', expectedError: 'Invalid email format' },
+          ],
+        },
+        {
+          field: 'password',
+          validClasses: [
+            { class: 'Meets all requirements', representative: 'Str0ng!Pass' },
+            { class: 'Minimum length (8)', representative: 'Abcde1!' + 'x' },
+            { class: 'With special chars variety', representative: 'P@$$w0rd!#' },
+          ],
+          invalidClasses: [
+            { class: 'Too short (7 chars)', representative: 'Ab1!xyz', expectedError: 'Password must be at least 8 characters' },
+            { class: 'No uppercase', representative: 'abcde1!x', expectedError: 'Password must contain an uppercase letter' },
+            { class: 'No number', representative: 'Abcdefg!', expectedError: 'Password must contain a number' },
+            { class: 'No special char', representative: 'Abcdefg1', expectedError: 'Password must contain a special character' },
+          ],
+        },
+      ],
+      edgeCaseData: [
+        { name: '田中太郎', email: 'tanaka@example.jp', password: 'T@naka123!', age: 30, role: 'viewer', _note: 'CJK characters in name', _category: 'unicode' },
+        { name: '👩‍💻 Dev', email: 'emoji@test.com', password: 'Em0ji!Test', age: 25, role: 'editor', _note: 'Emoji in name field', _category: 'unicode' },
+        { name: 'محمد عبدالله', email: 'mohammed@test.sa', password: 'M0hammed!x', age: 40, role: 'viewer', _note: 'RTL Arabic text in name', _category: 'unicode' },
+        { name: "O'Malley-Smith Jr.", email: 'omalley@test.com', password: "O'M@lley1!", age: 45, role: 'admin', _note: 'Apostrophe and hyphen in name — tests SQL escaping', _category: 'injection' },
+        { name: "'; DROP TABLE users; --", email: 'sql@inject.com', password: 'Inj3ct!on_', age: 30, role: 'viewer', _note: 'SQL injection attempt in name field', _category: 'injection' },
+        { name: '<script>alert("xss")</script>', email: 'xss@test.com', password: 'X$$_t3st!', age: 28, role: 'viewer', _note: 'XSS payload in name — should be escaped, not executed', _category: 'injection' },
+        { name: 'Li', email: 'li@test.com', password: 'LiL!_123x', age: 18, role: 'viewer', _note: 'Minimum valid name (2 chars) + minimum valid age (18)', _category: 'boundary' },
+        { name: 'Test User', email: 'expired-sub@test.com', password: 'Exp1red!x', age: 65, role: 'admin', _note: 'State: user with expired subscription + payment method on file + 3 failed payment attempts', _category: 'state' },
+      ],
+      invalidData: [
+        { name: '', email: 'valid@test.com', password: 'V@lid123!', age: 25, role: 'viewer', _note: 'Empty name', _expectedError: 'Name is required', _category: 'missing_required' },
+        { name: 'Valid Name', email: 'not-an-email', password: 'V@lid123!', age: 25, role: 'viewer', _note: 'Malformed email', _expectedError: 'Invalid email format', _category: 'format' },
+        { name: 'Valid Name', email: 'valid@test.com', password: 'short', age: 25, role: 'viewer', _note: 'Password too short', _expectedError: 'Password must be at least 8 characters', _category: 'out_of_range' },
+        { name: 'Valid Name', email: 'valid@test.com', password: 'V@lid123!', age: 15, role: 'viewer', _note: 'Age below minimum (15 < 18)', _expectedError: 'Must be at least 18 years old', _category: 'out_of_range' },
+        { name: 'Valid Name', email: 'valid@test.com', password: 'V@lid123!', age: 25, role: 'superadmin', _note: 'Invalid role enum value', _expectedError: 'Role must be admin, editor, or viewer', _category: 'format' },
+        { name: 123, email: 'valid@test.com', password: 'V@lid123!', age: 25, role: 'viewer', _note: 'Wrong type: number instead of string for name', _expectedError: 'Name must be a string', _category: 'wrong_type' },
+      ],
+      dataMasking: [
+        { field: 'name', piiType: 'Personal Name', technique: 'Substitution', example: 'Replace with synthetic name from same locale/ethnicity distribution' },
+        { field: 'email', piiType: 'Email Address', technique: 'Domain Substitution', example: 'Keep local part format, replace domain: aisha.patel@[masked].com' },
+        { field: 'password', piiType: 'Credential', technique: 'Redaction', example: 'Never store, display, or log — replace with [REDACTED]' },
+        { field: 'age', piiType: 'Demographic', technique: 'Generalization', example: 'Replace exact age with age range: 25-34' },
+      ],
+      formattedOutput: JSON.stringify([
+        { name: 'Aisha Patel', email: 'aisha.patel@techcorp.in', password: 'Str0ng!Pass', age: 28, role: 'editor' },
+        { name: 'Carlos Mendes', email: 'c.mendes@empresa.br', password: 'C@rlos2024!', age: 34, role: 'viewer' },
+        { name: 'Yuki Tanaka', email: 'y.tanaka@company.jp', password: 'Yuk1T@naka!', age: 41, role: 'admin' },
+      ], null, 2),
+      totalRecords: 19,
+    });
   }
   if (systemPrompt.includes('sprint test plan')) {
     return JSON.stringify({ testPlan: { sprintName: 'Sprint 24', objective: 'Test new features and regression', scope: 'Authentication, Billing, Dashboard', riskAssessment: 'Medium risk', estimatedHours: 40, startDate: 'Day 1', testEnvironments: ['staging', 'QA'] }, stories: [], regressionSuite: [], schedule: [{ day: 1, activities: ['Setup test environment', 'Review stories'], milestone: 'Test prep complete' }], entryExitCriteria: { entry: ['Build deployed to staging'], exit: ['All P0/P1 tests pass'] }, risks: [], markdownOutput: '# Sprint 24 Test Plan\n...' });
