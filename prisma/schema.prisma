@@ -1,0 +1,293 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+enum Priority {
+  P0
+  P1
+  P2
+  P3
+  P4
+}
+
+enum BugStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+  DUPLICATE
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum PlanTier {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum IntegrationType {
+  GITHUB
+  JIRA
+  LINEAR
+  SLACK
+  WEBHOOK
+}
+
+// ─── Multi-tenancy Models ─────────────────────────────────────────────────────
+
+model User {
+  id             String               @id @default(cuid())
+  email          String               @unique
+  emailVerified  DateTime?
+  name           String?
+  avatarUrl      String?
+  passwordHash   String?
+  organizations  OrganizationMember[]
+  projectMembers ProjectMember[]
+  usageLogs      UsageLog[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([email])
+}
+
+model Organization {
+  id           String               @id @default(cuid())
+  name         String
+  slug         String               @unique
+  planTier     PlanTier             @default(FREE)
+  members      OrganizationMember[]
+  projects     Project[]
+  usageLogs    UsageLog[]
+  integrations Integration[]
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  @@index([slug])
+}
+
+model OrganizationMember {
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role           MemberRole   @default(MEMBER)
+  joinedAt       DateTime     @default(now())
+
+  @@unique([userId, organizationId])
+  @@index([userId])
+  @@index([organizationId])
+}
+
+model Project {
+  id               String             @id @default(cuid())
+  name             String
+  slug             String
+  description      String?
+  techStack        String[]
+  testConventions  Json?
+  organizationId   String
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members          ProjectMember[]
+  bugReports       BugReport[]
+  generatedContent GeneratedContent[]
+  usageLogs        UsageLog[]
+  integrations     Integration[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+}
+
+model ProjectMember {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId String
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  role      MemberRole @default(MEMBER)
+  joinedAt  DateTime   @default(now())
+
+  @@unique([userId, projectId])
+  @@index([userId])
+  @@index([projectId])
+}
+
+model UsageLog {
+  id             String        @id @default(cuid())
+  userId         String?
+  user           User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  projectId      String?
+  project        Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  action         String
+  resourceType   String?
+  resourceId     String?
+  tokensUsed     Int?
+  cost           Float?
+  metadata       Json?
+  createdAt      DateTime      @default(now())
+
+  @@index([userId])
+  @@index([organizationId])
+  @@index([projectId])
+  @@index([createdAt])
+}
+
+model Integration {
+  id             String          @id @default(cuid())
+  organizationId String?
+  organization   Organization?   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  projectId      String?
+  project        Project?        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type           IntegrationType
+  name           String
+  config         Json
+  isActive       Boolean         @default(true)
+  lastSyncAt     DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([organizationId])
+  @@index([projectId])
+  @@index([type])
+}
+
+// ─── Core Bug Tracking Models ─────────────────────────────────────────────────
+
+model BugReport {
+  id                  String        @id @default(cuid())
+  projectId           String?
+  project             Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  rawInput            String        @db.Text
+  title               String
+  description         String        @db.Text
+  severity            Severity      @default(MEDIUM)
+  priority            Priority      @default(P2)
+  status              BugStatus     @default(OPEN)
+  stepsToReproduce    String[]
+  expectedResult      String?
+  actualResult        String?
+  environment         Json?
+  rootCauseHypotheses String[]
+  affectedModules     String[]
+  qualityScore        Float?
+  duplicateOfId       String?
+  duplicateOf         BugReport?    @relation("DuplicateRelation", fields: [duplicateOfId], references: [id])
+  duplicates          BugReport[]   @relation("DuplicateRelation")
+  screenshotUrls      String[]
+  logContent          String?       @db.Text
+  aiAnalysis          Json?
+  impactPrediction    Json?
+  tags                String[]
+  clusterId           String?
+  cluster             BugCluster?   @relation(fields: [clusterId], references: [id])
+  testCases           TestCase[]
+  chatMessages        ChatMessage[]
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@index([projectId])
+  @@index([severity])
+  @@index([status])
+  @@index([createdAt])
+  @@index([clusterId])
+}
+
+model TestCase {
+  id             String     @id @default(cuid())
+  bugReportId    String?
+  bugReport      BugReport? @relation(fields: [bugReportId], references: [id], onDelete: Cascade)
+  sourceType     String     @default("bug")
+  sourceInput    String?    @db.Text
+  title          String
+  description    String     @db.Text
+  steps          String[]
+  expectedResult String
+  type           String     @default("regression")
+  priority       Priority   @default(P2)
+  framework      String?
+  codeSnippet    String?    @db.Text
+  createdAt      DateTime   @default(now())
+
+  @@index([bugReportId])
+  @@index([sourceType])
+}
+
+model BugCluster {
+  id          String      @id @default(cuid())
+  name        String
+  description String?     @db.Text
+  bugReports  BugReport[]
+  bugCount    Int         @default(0)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model ChatMessage {
+  id          String    @id @default(cuid())
+  bugReportId String
+  bugReport   BugReport @relation(fields: [bugReportId], references: [id], onDelete: Cascade)
+  role        String
+  content     String    @db.Text
+  createdAt   DateTime  @default(now())
+
+  @@index([bugReportId])
+}
+
+model GeneratedContent {
+  id        String   @id @default(cuid())
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  type      String
+  input     String   @db.Text
+  output    Json
+  framework String?
+  language  String?
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model AnalyticsSnapshot {
+  id              String   @id @default(cuid())
+  date            DateTime @default(now())
+  totalBugs       Int
+  criticalBugs    Int
+  highBugs        Int
+  mediumBugs      Int
+  lowBugs         Int
+  resolvedBugs    Int
+  duplicateBugs   Int
+  avgQualityScore Float?
+  topModules      Json?
+  createdAt       DateTime @default(now())
+
+  @@index([date])
+}
