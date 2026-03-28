@@ -45,8 +45,8 @@ Environments: Dev, Staging, UAT, Production"
         ]}
         renderResult={(result) => {
           const doc = result.document as Record<string, string>;
-          const sections = (result.sections || []) as Array<Record<string, unknown>>;
-          const tables = (result.tables || []) as Array<Record<string, unknown>>;
+          const sections = Array.isArray(result.sections) ? result.sections as Array<Record<string, unknown>> : [];
+          const tables = Array.isArray(result.tables) ? result.tables as Array<Record<string, unknown>> : [];
           const markdown = result.markdownOutput as string;
 
           return (

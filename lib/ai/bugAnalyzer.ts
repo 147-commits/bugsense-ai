@@ -1077,10 +1077,15 @@ Return ONLY valid JSON:
 type QADocType = 'test_strategy' | 'test_summary' | 'traceability_matrix' | 'test_closure' | 'defect_report' | 'test_environment' | 'qa_checklist' | 'test_execution_report' | 'uat_signoff' | 'risk_assessment';
 
 function getDocTypePrompt(docType: QADocType, dateStr: string): string {
-  const header = `Use [Company Name] and [Project Name] as placeholders the user can replace.
+  const docTypeLabel = docType.replace(/_/g, ' ').toUpperCase();
+
+  const header = `CRITICAL INSTRUCTION: Generate ONLY a ${docTypeLabel} document. Do NOT generate a test strategy. Do NOT default to test strategy structure. The output structure MUST match the specific template described below — every section listed below MUST appear in your output. If you generate a test strategy when a different document type was requested, the output is WRONG.
+
+Use [Company Name] and [Project Name] as placeholders the user can replace.
 Include a Version History table at the very top of the markdown (columns: Version, Date, Author, Change Description).
 Include a Document Approval / Sign-off section at the bottom (table: Role, Name, Signature, Date).
-Use professional markdown tables throughout. The markdownOutput must be copy-paste ready for Confluence or Google Docs.`;
+Use professional markdown tables throughout. The markdownOutput must be copy-paste ready for Confluence or Google Docs.
+Date for document: ${dateStr}`;
 
   const prompts: Record<QADocType, string> = {
     test_strategy: `You are a QA Director at a Fortune 500 company creating a TEST STRATEGY DOCUMENT.
@@ -1091,178 +1096,212 @@ REQUIRED SECTIONS — generate ALL of these with realistic, detailed content:
 1. Executive Summary — high-level purpose, project context, strategic testing goals
 2. Testing Objectives — SMART objectives tied to business outcomes
 3. Scope — In-Scope items table (module, test types, priority) and Out-of-Scope items with justification
-4. Test Levels Matrix — table with columns: Test Level (Unit, Component, Integration, System, UAT), Description, Owner, Entry Criteria, Exit Criteria, Tools
+4. Test Levels Matrix — table: Test Level (Unit, Component, Integration, System, UAT), Description, Owner, Entry Criteria, Exit Criteria, Tools
 5. Test Types — Functional, Non-Functional (Performance, Security, Accessibility, Usability, Compatibility), Regression, Smoke, Sanity — each with description and when applied
-6. Tools & Infrastructure — table: Tool, Purpose, License, Owner
-7. Environment Strategy — table: Environment (Dev, QA, Staging, Pre-Prod, Prod), Purpose, Refresh Cycle, Data Strategy, Access
-8. Risk Matrix — table: Risk ID, Risk Description, Probability (H/M/L), Impact (H/M/L), Risk Score, Mitigation Strategy, Owner
-9. RACI Matrix — table: Activity (Test Planning, Test Design, Test Execution, Defect Triage, Sign-off, etc.) vs Roles (QA Lead, QA Engineer, Dev Lead, Developer, PM, BA)
-10. Defect Management Workflow — states (New → Assigned → In Progress → Fixed → Verified → Closed / Reopened), SLA by severity, escalation path
-11. Entry/Exit Criteria per Test Level — table format
-12. Schedule & Milestones — Gantt-style table: Phase, Start, End, Deliverable, Owner
-13. Sign-off Section`,
+6. Automation Strategy — tool selection rationale, scope of automation, ROI targets, automation vs manual split, framework architecture
+7. Tools & Infrastructure — table: Tool, Purpose, License, Owner
+8. Test Environment Strategy — table: Environment (Dev, QA, Staging, Pre-Prod, Prod), Purpose, Refresh Cycle, Data Strategy, Access
+9. Test Data Strategy — how test data is generated, masked, refreshed, managed across environments
+10. Defect Management — lifecycle (New → Assigned → In Progress → Fixed → Verified → Closed / Reopened), severity definitions with examples, triage SLA by severity, escalation path
+11. RACI Matrix — table: Activity vs Roles (QA Lead, QA Engineer, Dev Lead, Developer, PM, BA) with R/A/C/I designations
+12. Risk Register — table: Risk ID, Risk Description, Probability (H/M/L), Impact (H/M/L), Risk Score, Mitigation Strategy, Owner
+13. Metrics & KPIs — what quality metrics will be tracked, targets, reporting cadence
+14. Schedule & Milestones — Gantt-style table: Phase, Start, End, Deliverable, Owner
+15. Entry/Exit Criteria per Test Level — table format
+16. Sign-off Section`,
 
-    test_summary: `You are a QA Lead at a Fortune 500 company creating a TEST SUMMARY REPORT.
+    test_summary: `You are a QA Lead at a Fortune 500 company creating a TEST SUMMARY REPORT. This is a POST-TESTING document about what HAPPENED, not a plan for what WILL happen.
 
 ${header}
+
+THIS IS NOT A TEST STRATEGY. This document reports on testing that was COMPLETED. Use past tense. Include actual metrics and results.
 
 REQUIRED SECTIONS — generate ALL with realistic metrics:
-1. Release/Sprint Identifier — release name, version, sprint number, date range
-2. Test Execution Summary Table — columns: Test Suite, Planned, Executed, Passed, Failed, Blocked, Not Run, Pass Rate %
-3. Defect Summary — table by Severity (Critical/High/Medium/Low): Found, Fixed, Open, Deferred, Reopen
-4. Defect Summary by Priority — same structure for P0-P4
-5. Test Coverage by Module — table: Module, Requirements Count, Test Cases, Executed, Coverage %
-6. Environment Details — table: Environment, URL, Version, Database, Notes
-7. Deviations from Test Plan — what changed and why
-8. Open Defects with Risk Assessment — table: Defect ID, Title, Severity, Impact, Risk if released, Workaround Available (Y/N)
-9. Go/No-Go Recommendation — EXPLICIT recommendation with supporting evidence table
-10. Lessons Learned — what went well, what didn't, action items
-11. Metrics Dashboard — Defect Density (defects/KLOC or per module), Defect Removal Efficiency (DRE), Test Execution Rate (daily/sprint), Defect Discovery Rate over time`,
+1. Report Identifier — report ID, release name, version, sprint number, date range, prepared by
+2. Executive Summary — 2-3 paragraph overview of testing outcomes, key findings, and recommendation
+3. Test Objective vs Achievement — table: Objective, Target, Actual, Status (Met/Missed/Partial)
+4. Test Execution Summary TABLE — columns: Test Type (Smoke, Functional, Integration, Regression, E2E, Performance), Planned, Executed, Passed, Failed, Blocked, Skipped, Pass Rate %
+5. Defect Summary by Severity — table: Severity (Critical/High/Medium/Low/Info), Found, Fixed, Open, Deferred, Reopened, % of Total
+6. Defect Summary by Status — table: Status (Open/In Progress/Fixed/Verified/Closed/Deferred), Count, %
+7. Defect Summary by Module — table: Module, Total Defects, Critical, High, Medium, Low, Defect Density
+8. Defect Trends — table by week/sprint: Period, Found, Resolved, Cumulative Open (describe trend line)
+9. Test Coverage by Module — table: Module, Requirements, Test Cases, Executed, Coverage %
+10. Environment Details — table: Environment, URL, Version Deployed, Database Version, Notes
+11. Deviations from Test Plan — what changed from original plan and why
+12. Open Defects with Risk Assessment — table: Defect ID, Title, Severity, User Impact, Risk if Released, Workaround (Y/N), Recommendation
+13. Key Metrics Dashboard:
+    - Test Case Pass Rate = (Passed / Executed) × 100
+    - Defect Density = Total Defects / Modules (or KLOC)
+    - Defect Removal Efficiency (DRE) = (Defects found in testing / Total defects including production) × 100
+    - Defect Leakage Rate = (Production defects / Total defects) × 100
+    - Test Execution Rate = Tests executed per day
+14. Remaining Risks — table: Risk, Likelihood, Impact, Mitigation
+15. Lessons Learned — What went well, What didn't, Action items for next cycle
+16. Go/No-Go Recommendation — EXPLICIT recommendation (GO / NO-GO / CONDITIONAL) with evidence table: Criterion, Target, Actual, Met?`,
 
-    traceability_matrix: `You are a QA Manager creating a REQUIREMENTS TRACEABILITY MATRIX (RTM).
+    traceability_matrix: `You are a QA Manager creating a REQUIREMENTS TRACEABILITY MATRIX (RTM). This document is TABLE-HEAVY — it's primarily tables, not prose.
 
 ${header}
+
+THIS IS NOT A TEST STRATEGY. This is a TRACEABILITY document that maps requirements to test cases. It should be 80% tables.
+
+REQUIRED SECTIONS — generate ALL. The tables must have realistic sample data (10+ rows each):
+1. Forward Traceability Table — columns: Requirement ID, Requirement Description, Priority (P0-P4), Test Case ID(s), Test Status (Pass/Fail/Not Run), Defect ID(s), Coverage Status (Covered/Partial/Not Covered). Generate at least 10 rows with realistic data.
+2. Backward Traceability Table — columns: Test Case ID, Test Case Title, Requirement ID(s) Covered, Execution Status, Last Run Date. Include orphan tests that map to no requirement.
+3. Coverage Heat Map by Module — table: Module, Total Requirements, Covered, Partial, Not Covered, Coverage %, RAG Status (Red <50%/Amber 50-80%/Green >80%)
+4. Gap Analysis — Requirements with NO test coverage. Table: Requirement ID, Description, Priority, Risk if Untested, Recommended Action
+5. Orphaned Test Cases — Test cases NOT linked to any requirement. Table: Test Case ID, Title, Recommendation (Keep/Retire/Reassign to requirement)
+6. Coverage Summary — Overall coverage %, Coverage by priority (P0: %, P1: %, P2: %, P3: %), Coverage trend vs previous release
+7. Coverage Improvement Plan — table: Action, Priority, Owner, Target Date, Expected Coverage Improvement`,
+
+    test_closure: `You are a QA Director creating a TEST CLOSURE REPORT for executive sign-off. This is a FORMAL document that closes testing activities.
+
+${header}
+
+THIS IS NOT A TEST STRATEGY. This document CLOSES testing — it reports final results and obtains sign-off. Use past tense.
 
 REQUIRED SECTIONS — generate ALL:
-1. Forward Traceability Table — columns: Requirement ID, Requirement Title, Priority, Test Case IDs (comma-separated), Test Status (Pass/Fail/Not Run), Defect IDs, Coverage Status
-2. Backward Traceability Table — columns: Test Case ID, Test Case Title, Requirement IDs Covered, Execution Status, Last Run Date
-3. Coverage Heat Map by Module — table: Module, Total Requirements, Covered, Partial, Not Covered, Coverage %, RAG Status (Red/Amber/Green)
-4. Gap Analysis — Requirements without any test coverage, with risk assessment for each
-5. Orphaned Test Cases — test cases not linked to any requirement, with recommendation (keep/retire/reassign)
-6. Requirements Without Coverage — highlighted list with business impact
-7. Traceability Summary — overall coverage %, coverage by priority (P0-P4), coverage trend
-8. Coverage Improvement Plan — action items to close gaps`,
+1. Project Summary — project name, release version, test period dates, QA team size, total effort (person-days)
+2. Objectives vs Achievements — table: Objective, Target, Actual, Status (Met/Partially Met/Not Met). At least 6 rows.
+3. Quality KPIs — table: KPI, Target, Actual, Status, Trend
+   - Defect Density (defects per feature or per KLOC)
+   - Defect Removal Efficiency (DRE) = defects found in testing / (testing + production defects)
+   - Test Coverage % by requirements AND by code
+   - Defect Leakage Rate = production defects / total defects × 100
+   - Test Automation Rate = automated tests / total tests × 100
+4. Test Execution Results — table: Test Type, Total, Executed, Passed, Failed, Blocked, Pass Rate %
+5. Defect Analysis — two tables:
+   a. By Severity: Severity, Found, Fixed, Deferred, Open, Reopened
+   b. By Priority: Priority, Found, Fixed, Deferred, Open, Reopened
+6. Pending Risks — table: Risk ID, Description, Severity, Mitigation, Owner, Resolution Timeline
+7. Lessons Learned — categorized sections: Process improvements, Tool improvements, People/skills, Technical debt identified
+8. Recommendations for Next Release — numbered, prioritized list with expected impact
+9. Formal Sign-off — table: Role (QA Lead, Dev Lead, PM, Product Owner, VP Engineering), Name, Decision (Approve/Reject/Conditional), Conditions, Date`,
 
-    test_closure: `You are a QA Director creating a TEST CLOSURE REPORT for executive sign-off.
-
-${header}
-
-REQUIRED SECTIONS — generate ALL:
-1. Project Summary — project name, version, test period, team size, scope
-2. Objectives vs Achievements — table: Objective, Target, Actual, Status (Met/Partially Met/Not Met)
-3. Quality KPIs — table: KPI, Target, Actual, Status
-   - Defect Density (defects per KLOC or per feature)
-   - Defect Removal Efficiency (DRE = defects found in testing / total defects)
-   - Test Coverage % (by requirements, by code)
-   - Defect Leakage Rate (defects found in production / total defects)
-4. Test Metrics Summary — total test cases, executed, pass rate, automation rate
-5. Defect Analysis — table: Severity, Found, Fixed, Deferred, Open, Reopen; same for Priority
-6. Pending Risks with Mitigation — table: Risk, Severity, Mitigation, Owner, Timeline
-7. Lessons Learned — categorized: Process, Tools, People, Technical
-8. Recommendations for Next Release — prioritized list
-9. Formal Sign-off Section — table: Role (QA Lead, Dev Lead, PM, Product Owner, Sponsor), Name, Decision (Approve/Reject/Conditional), Date, Comments`,
-
-    defect_report: `You are a QA Analytics Lead creating a DEFECT ANALYSIS REPORT.
+    defect_report: `You are a QA Analytics Lead creating a DEFECT ANALYSIS REPORT. This is a DATA-HEAVY analytical document focused entirely on defect metrics.
 
 ${header}
+
+THIS IS NOT A TEST STRATEGY. This document analyzes DEFECTS — their distribution, trends, root causes, and prevention. It should be 70% tables and metrics.
 
 REQUIRED SECTIONS — generate ALL with realistic sample data:
-1. Defect Distribution by Severity — table: Severity, Count, % of Total, Trend vs Last Release
-2. Defect Distribution by Priority — table: Priority, Count, % of Total
-3. Defect Distribution by Module — table: Module, Total, Critical, High, Medium, Low, % of Total
-4. Defect Distribution by Sprint — table: Sprint, Found, Fixed, Reopened, Net Open
-5. Defect Discovery vs Resolution Rate — table by week/sprint: Period, Found, Resolved, Cumulative Open
-6. Mean Time to Resolution by Severity — table: Severity, Avg Hours to Fix, Min, Max, SLA Target, SLA Met %
-7. Root Cause Categorization — table: Root Cause (Code Defect, Requirement Gap, Environment Issue, Test Data, Design Flaw, Configuration, Third-Party), Count, %, Prevention Action
-8. Defect Injection Point Analysis — table: Phase Introduced (Requirements, Design, Coding, Integration, Deployment), Count, %, Cost to Fix (relative)
-9. Defect Age Analysis — table: Age Bucket (0-1 days, 2-3 days, 4-7 days, 1-2 weeks, 2+ weeks), Count, % — how long defects stay open
-10. Pareto Analysis — identify the 20% of modules causing 80% of defects, table format
-11. Prevention Recommendations — prioritized action items with expected impact`,
+1. Defect Distribution by Severity — table: Severity, Count, % of Total, Trend vs Last Release (↑/↓/→)
+2. Defect Distribution by Priority — table: Priority (P0-P4), Count, % of Total
+3. Defect Distribution by Module — table: Module, Total, Critical, High, Medium, Low, % of Total. At least 6 modules.
+4. Defect Distribution by Sprint — table: Sprint, Found, Fixed, Reopened, Net Open. At least 4 sprints.
+5. Defect Discovery vs Resolution Rate — table by week/sprint: Period, Found, Resolved, Cumulative Open. Describe the trend (converging = good, diverging = bad).
+6. Mean Time to Resolution — table: Severity, Avg Hours to Fix, Min Hours, Max Hours, SLA Target, SLA Met %
+7. Root Cause Categorization — table: Root Cause Category (Coding Error, Requirement Gap, Requirement Misunderstanding, Environment Issue, Test Data Problem, Design Flaw, Configuration Error, Third-Party Dependency), Count, %, Prevention Action. Include percentages.
+8. Defect Injection Point Analysis — table: SDLC Phase Introduced (Requirements, Design, Coding, Integration, Deployment), Count, %, Relative Cost to Fix (1x/5x/10x/50x/100x per Boehm's curve)
+9. Defect Age Analysis — table: Age Bucket (0-1 days, 2-3 days, 4-7 days, 1-2 weeks, 2-4 weeks, 4+ weeks), Open Count, Resolved Count, % of Total
+10. Pareto Analysis — identify which 20% of modules cause 80% of bugs. Table: Module, Defect Count, Cumulative %, Pareto Category (Top 20% / Remaining 80%)
+11. Sprint-over-Sprint Trend Comparison — table: Metric (Total Found, Total Fixed, DRE, MTTR, Defect Density), Sprint N-2, Sprint N-1, Sprint N, Trend
+12. Prevention Recommendations — numbered list: Recommendation, Expected Impact, Priority, Owner`,
 
-    test_environment: `You are a DevOps/QA Infrastructure Lead creating a TEST ENVIRONMENT SETUP DOCUMENT.
+    test_environment: `You are a DevOps/QA Infrastructure Lead creating a TEST ENVIRONMENT SETUP DOCUMENT. This is a TECHNICAL OPERATIONS document.
 
 ${header}
+
+THIS IS NOT A TEST STRATEGY. This document describes HOW to set up and maintain test environments. It should include actual commands, versions, and configuration details.
 
 REQUIRED SECTIONS — generate ALL:
-1. Environment Architecture — text description of the environment topology (tiers, load balancers, microservices layout)
-2. Hardware/VM Specifications — table: Component, CPU, RAM, Storage, OS, Purpose
-3. Software Stack — table: Software, Version, Purpose, License, Installation Notes
-4. Network Configuration — VPN requirements, firewall rules, port mappings, DNS entries
-5. Database Setup — table: Database, Engine, Version, Size, Refresh Source, Refresh Schedule; include test data seeding requirements
-6. Third-Party Service Configurations — table: Service, Purpose, Endpoint, Auth Method, Mock Available (Y/N), Rate Limits
-7. Access Credentials Template — table: System, URL, Username Template, Role, Access Request Process (NO real credentials)
-8. Environment URLs — table: Environment (Dev, QA, Staging, Pre-Prod, Prod), App URL, API URL, Admin URL, Monitoring URL
-9. Setup Steps with Commands — numbered step-by-step with actual CLI commands (git clone, docker-compose, npm install, etc.)
-10. Health Check Verification — table: Check, Command/URL, Expected Result, Timeout
-11. Troubleshooting Guide — table: Symptom, Likely Cause, Resolution Steps
-12. Environment Refresh/Reset Procedures — step-by-step for each environment`,
+1. Environment Architecture Overview — text description of environment topology (tiers, load balancers, microservices, container orchestration)
+2. Hardware/VM Specifications — table: Component (App Server, DB Server, Cache, Queue, CDN), CPU, RAM, Storage, OS, Purpose
+3. Software Stack — table: Software, EXACT Version, Purpose, License Type, Installation Command/Notes. Include specific versions (e.g., Node.js 20.11.0, PostgreSQL 16.2).
+4. Network Configuration — VPN requirements, firewall rules table (Port, Protocol, Source, Destination, Purpose), DNS entries
+5. Database Setup — table: Database Name, Engine/Version, Size, Refresh Source, Refresh Schedule, Test Data Seeding Method
+6. Third-Party Service Configurations — table: Service, Purpose, Endpoint URL, Auth Method, Mock Available (Y/N), Rate Limits, Sandbox/Prod
+7. Access Credentials Template — table: System, URL, Username Template, Default Role, Access Request Process. NO real passwords.
+8. Environment URLs — table: Environment (Dev, QA, Staging, Pre-Prod, Prod), App URL, API URL, Admin Panel URL, Monitoring Dashboard URL
+9. Setup Steps with Commands — numbered steps with actual CLI commands (git clone, docker-compose up, npm install, database migrations, seed scripts)
+10. Health Check Verification — table: Check Name, Command or URL, Expected Result, Timeout
+11. Known Differences from Production — table: Aspect (Scale, Data Volume, External Services, Auth), Production Config, Test Config, Impact on Testing
+12. Troubleshooting Guide — table: Symptom, Likely Cause, Resolution Steps, Escalation Contact
+13. Environment Refresh/Reset Procedures — step-by-step for each environment type (full reset, data-only refresh, config-only update)`,
 
-    qa_checklist: `You are a QA Process Lead creating a QA PROCESS CHECKLIST document.
+    qa_checklist: `You are a QA Process Lead creating a QA PROCESS CHECKLIST document. This is a CHECKLIST document — it should use checkbox format throughout.
+
+${header}
+
+THIS IS NOT A TEST STRATEGY. This document contains CHECKLISTS with checkboxes (use ☐ in markdown). Each checklist item must have: #, Checklist Item, Responsible Role, Status (☐/☑), Notes column.
+
+Generate SIX distinct checklists:
+
+1. Sprint QA Checklist — three sub-sections:
+   a. Pre-Sprint (8-10 items): requirements reviewed with AC, test environment reserved, test data prepared, automation framework updated, capacity planned, risks identified, dependency matrix reviewed
+   b. During Sprint (8-10 items): daily smoke tests run, test execution tracked in tool, defect triage attended, daily standup reported, blocker escalation within 2h, test progress dashboard updated, exploratory sessions completed
+   c. End of Sprint (8-10 items): full regression executed, test summary report generated, defect backlog groomed, sprint retrospective QA input, knowledge base updated, automation added for new features, metrics reported
+
+2. Release Checklist — four sub-sections:
+   a. Pre-Deploy (8-10 items): all test suites green, go/no-go meeting completed, release notes reviewed and approved, rollback plan documented and tested, monitoring alerts configured, on-call schedule confirmed
+   b. Deploy (6-8 items): deployment steps executed per runbook, smoke tests in target environment, health checks all passing, performance baseline captured, cache invalidation verified
+   c. Post-Deploy (6-8 items): production verification tests executed, user-facing critical paths validated, error rate monitoring (first 24h), stakeholder notification sent, support team briefed
+   d. Rollback (5-6 items): rollback criteria clearly defined, rollback procedure tested in staging, data migration reversibility confirmed, communication plan for rollback ready
+
+3. Requirement Review Checklist (8-10 items): testability verified, acceptance criteria clear and measurable, edge cases identified, dependencies mapped, non-functional requirements specified, data requirements defined
+
+4. Test Readiness Checklist (8-10 items): test plan approved by stakeholders, test cases peer-reviewed, test data created and verified, test environment stable for 24h, automation scripts tested, entry criteria met, test schedule confirmed
+
+5. UAT Sign-off Checklist (8-10 items): all UAT scenarios executed, business process validations complete, user feedback collected and addressed, training materials prepared, sign-off forms distributed, outstanding issues documented with risk acceptance
+
+6. Production Verification Checklist (8-10 items): critical user journeys verified, API integrations validated end-to-end, performance within SLA, security scan clear, monitoring dashboards green, logging verified, alerting tested`,
+
+    test_execution_report: `You are a QA Lead creating a TEST EXECUTION REPORT for a specific sprint or release cycle. This is a RESULTS document about testing that was PERFORMED.
 
 ${header}
 
-REQUIRED SECTIONS — generate ALL as checkbox-style tables with columns: #, Checklist Item, Responsible Role, Status (checkbox placeholder), Notes
+THIS IS NOT A TEST STRATEGY. This reports on test EXECUTION that already happened. Use past tense. Include specific numbers and results.
 
-1. Sprint QA Checklist
-   a. Pre-Sprint: requirements reviewed, acceptance criteria defined, test env ready, test data prepared, automation framework updated
-   b. During Sprint: daily smoke tests, test case execution tracking, defect triage attendance, test progress reporting, blocker escalation
-   c. End of Sprint: regression suite executed, test summary prepared, defect backlog reviewed, retrospective input, knowledge base updated
+REQUIRED SECTIONS — generate ALL with realistic data:
+1. Execution Overview — sprint/release name, execution period, QA team members involved, environment(s) used, build version tested
+2. Test Execution Summary — table: Test Suite (Smoke, Functional, Integration, Regression, E2E, Performance), Total Cases, Executed, Passed, Failed, Blocked, Skipped, Pass Rate %
+3. Daily Execution Progress — table: Date (Day 1 through last day), Planned Tests, Executed, Cumulative %, Blockers/Notes
+4. Failed Test Cases Detail — table: Test ID, Title, Module, Failure Reason (specific), Linked Defect ID, Defect Severity, Retest Status (Retested-Pass/Retested-Fail/Pending)
+5. Blocked Test Cases Detail — table: Test ID, Title, Blocker Description, Blocked Since (date), Dependency, Resolution ETA, Impact
+6. Automation Execution Results — table: Suite Name, Total Tests, Passed, Failed, Flaky (passed on retry), Execution Time, Last Run Timestamp
+7. Defects Raised This Cycle — table: Defect ID, Title, Severity, Priority, Module, Current Status, Assigned To
+8. Test Environment Issues — table: Issue, Date, Duration, Impact on Testing (tests blocked/delayed), Resolution
+9. Execution Metrics — calculated values: Test Execution Rate (tests/day), Defect Detection Rate (defects/tests executed), Automation Coverage (auto tests/total tests), Manual Effort (hours)
+10. Risks & Recommendations — testing risks identified, schedule impact assessment, recommendations for next cycle`,
 
-2. Release Checklist
-   a. Pre-Deploy: all test suites passed, go/no-go meeting held, release notes reviewed, rollback plan documented, monitoring alerts configured
-   b. Deploy: deployment steps executed, smoke tests in production, health checks verified, performance baseline captured
-   c. Post-Deploy: production verification tests, user-facing feature validation, error rate monitoring (24h), stakeholder notification
-   d. Rollback: rollback criteria defined, rollback procedure tested, data migration reversibility confirmed
-
-3. Requirement Review Checklist — testability, acceptance criteria, edge cases identified, dependencies mapped
-
-4. Test Readiness Checklist — test plan approved, test cases reviewed, test data available, environment stable, automation scripts ready
-
-5. UAT Sign-off Checklist — UAT test cases executed, business scenarios validated, user feedback collected, training materials ready, sign-off obtained
-
-6. Production Verification Checklist — critical paths verified, integrations validated, performance acceptable, security scan clear, monitoring active`,
-
-    test_execution_report: `You are a QA Lead creating a TEST EXECUTION REPORT for a specific sprint or release cycle.
+    uat_signoff: `You are a Business Analyst / QA Lead creating a UAT SIGN-OFF DOCUMENT for formal user acceptance. This is a BUSINESS document for stakeholder sign-off.
 
 ${header}
+
+THIS IS NOT A TEST STRATEGY. This is a formal UAT acceptance document written for BUSINESS stakeholders, not technical teams. Use business language.
 
 REQUIRED SECTIONS — generate ALL:
-1. Execution Overview — sprint/release name, execution period, team members, environment used
-2. Test Execution Summary — table: Test Suite, Total Cases, Executed, Passed, Failed, Blocked, Skipped, Pass Rate %
-3. Daily Execution Progress — table: Date, Planned, Executed, Cumulative %, Blockers
-4. Failed Test Cases — table: Test ID, Title, Module, Failure Reason, Defect ID, Severity, Retest Status
-5. Blocked Test Cases — table: Test ID, Title, Blocker Description, Blocked Since, Resolution ETA
-6. Automation Execution Results — table: Suite, Total, Passed, Failed, Flaky, Execution Time, Last Run
-7. Defects Raised This Cycle — table: Defect ID, Title, Severity, Priority, Module, Status, Assignee
-8. Test Environment Issues — incidents, downtime, impact on testing
-9. Execution Metrics — Test Execution Rate, Defect Detection Rate, Automation vs Manual ratio
-10. Risks & Recommendations — testing risks, schedule impact, recommendations for next cycle`,
+1. UAT Overview — purpose of UAT, scope (features/modules), participants table (Name, Role, Department), UAT period, success criteria (quantified: e.g., "95% of critical scenarios pass")
+2. Business Scenarios Tested — table: Scenario ID, Business Process, Description, Priority (Critical/High/Medium), Status (Pass/Fail/Partial), Tested By, Notes
+3. UAT Test Results Summary — table: Module/Feature, Total Scenarios, Passed, Failed, Blocked, Acceptance Rate %
+4. Defects Found During UAT — table: Defect ID, Description, Severity, Business Impact Description, Resolution Status, Accepted for Release (Yes/No/Conditional), Risk if Released
+5. Deferred Items — table: Item, Reason for Deferral, Business Impact, Target Release, Stakeholder Approval
+6. User Feedback Summary — categorized: Positive Feedback, Improvement Suggestions, Concerns Raised, Action Items
+7. Training & Documentation Readiness — table: Item (User Guide, FAQ, Training Session, Release Notes, Support Runbook), Status (Ready/In Progress/Not Started), Owner, Target Date
+8. Go-Live Readiness Checklist — table: Criteria, Status (Ready/Not Ready), Evidence/Link, Owner
+9. Formal Acceptance Decision — clearly stated: ACCEPT / CONDITIONAL ACCEPT (list conditions) / REJECT (list reasons)
+10. Business Sign-off Table — table: Stakeholder Name, Role/Title, Department, Decision (Accept/Reject/Conditional), Conditions (if any), Signature, Date`,
 
-    uat_signoff: `You are a Business Analyst / QA Lead creating a UAT SIGN-OFF DOCUMENT for formal user acceptance.
-
-${header}
-
-REQUIRED SECTIONS — generate ALL:
-1. UAT Overview — purpose, scope, participants, UAT period, success criteria
-2. Business Scenarios Tested — table: Scenario ID, Business Process, Description, Priority, Status (Pass/Fail/Partial), Tester
-3. UAT Test Results Summary — table: Module, Scenarios, Passed, Failed, Blocked, Acceptance %
-4. Defects Found During UAT — table: Defect ID, Description, Severity, Business Impact, Resolution Status, Accepted for Release (Y/N)
-5. Deferred Items — features or fixes deferred to next release with business justification
-6. User Feedback Summary — categorized feedback from UAT participants
-7. Training & Documentation Readiness — table: Item (User Guide, FAQ, Training Video, Release Notes), Status, Owner
-8. Go-Live Readiness Checklist — table: Criteria, Status (Ready/Not Ready), Evidence, Owner
-9. Formal Acceptance Decision — ACCEPT / CONDITIONAL ACCEPT / REJECT with conditions
-10. Sign-off Table — table: Role (Business Owner, Product Manager, UAT Lead, QA Lead, IT Director), Name, Decision, Date, Signature`,
-
-    risk_assessment: `You are a QA Risk Manager creating a RISK ASSESSMENT MATRIX for testing activities.
+    risk_assessment: `You are a QA Risk Manager creating a RISK ASSESSMENT MATRIX for testing activities. This is a RISK-FOCUSED document.
 
 ${header}
 
+THIS IS NOT A TEST STRATEGY. This document identifies, scores, and plans mitigation for TESTING RISKS. It's primarily a risk register with analysis.
+
 REQUIRED SECTIONS — generate ALL:
-1. Risk Assessment Overview — methodology (probability × impact), risk appetite, assessment scope
-2. Risk Scoring Matrix — 5×5 grid: Probability (Very Low to Very High) × Impact (Negligible to Critical), color-coded zones (Green/Yellow/Orange/Red)
-3. Identified Testing Risks — detailed table: Risk ID, Category (Technical, Resource, Schedule, Scope, External, Data), Risk Description, Probability (1-5), Impact (1-5), Risk Score, Risk Level (Low/Medium/High/Critical), Mitigation Strategy, Contingency Plan, Owner, Status, Review Date
-4. Risk Categories Breakdown:
-   a. Technical Risks — system complexity, integration points, new technology, performance
-   b. Resource Risks — skill gaps, availability, knowledge dependency
-   c. Schedule Risks — compressed timelines, dependency delays, environment availability
-   d. Scope Risks — requirement changes, scope creep, unclear acceptance criteria
-   e. External Risks — third-party dependencies, vendor SLAs, regulatory changes
-   f. Data Risks — test data availability, data privacy, data refresh
-5. Risk Heat Map — summary table: Risk Level, Count, Top Risk per Level
-6. Mitigation Plan Timeline — table: Risk ID, Mitigation Action, Start Date, Target Date, Owner, Status
-7. Risk Monitoring & Review — review cadence, escalation criteria, risk register maintenance process
-8. Residual Risk Summary — risks accepted after mitigation with business justification`,
+1. Risk Assessment Overview — methodology (Probability × Impact = Risk Score), risk appetite definition, assessment scope, risk tolerance thresholds
+2. Risk Scoring Matrix — 5×5 grid description: Probability (1-Very Low to 5-Very High) × Impact (1-Negligible to 5-Critical). Define zones: Green (1-4), Yellow (5-9), Orange (10-14), Red (15-25)
+3. Risk Register — MAIN TABLE with columns: Risk ID, Category, Risk Description, Probability (1-5), Impact (1-5), Risk Score, Priority (Critical/High/Medium/Low), Mitigation Strategy, Contingency Plan, Owner, Status (Open/Mitigating/Accepted/Closed), Review Date. Generate at least 10 risks.
+4. Risk Categories with specific risks for each:
+   a. Testing Risks (3-4 items) — insufficient test coverage, flaky automation, inadequate regression
+   b. Technical Risks (3-4 items) — system complexity, integration failures, new technology, performance degradation
+   c. Resource Risks (2-3 items) — skill gaps, availability, single points of knowledge failure
+   d. Schedule Risks (2-3 items) — compressed timelines, late code delivery, environment downtime
+   e. Environment Risks (2-3 items) — environment instability, data refresh failures, config drift from production
+5. Risk Heat Map Summary — table: Risk Level (Critical/High/Medium/Low), Count, Top Risk in Category, Immediate Action Required (Y/N)
+6. Mitigation Plan Timeline — table: Risk ID, Mitigation Action, Start Date, Target Completion, Owner, Current Status, % Complete
+7. Risk Monitoring & Review Process — review cadence (weekly/biweekly), escalation criteria, risk register update process, RACI for risk management
+8. Residual Risk Summary — table: Risk ID, Original Score, Mitigation Applied, Residual Score, Accepted By, Justification for Acceptance`,
   };
 
   return prompts[docType] ?? prompts.test_strategy;
@@ -1271,13 +1310,16 @@ REQUIRED SECTIONS — generate ALL:
 export async function generateQADocumentation(input: string, docType: QADocType) {
   const dateStr = new Date().toISOString().split('T')[0];
   const docTypeLabel = docType.replace(/_/g, ' ');
+  const docTypeTitleCase = docTypeLabel.replace(/\b\w/g, (c) => c.toUpperCase());
 
   const systemPrompt = `${getDocTypePrompt(docType, dateStr)}
+
+REMEMBER: You are generating a ${docTypeTitleCase} — NOT a test strategy. The title must say "${docTypeTitleCase}". The content must match the template above.
 
 Return ONLY valid JSON in this exact structure:
 {
   "document": {
-    "title": "Specific title for this ${docTypeLabel}",
+    "title": "${docTypeTitleCase} — [Project Name]",
     "type": "${docType}",
     "version": "1.0",
     "author": "QA Team",
@@ -1286,7 +1328,7 @@ Return ONLY valid JSON in this exact structure:
   },
   "sections": [
     {
-      "heading": "Section heading",
+      "heading": "Section heading matching the template above",
       "content": "Detailed section content",
       "subsections": [
         { "heading": "Subsection heading", "content": "Detailed content" }
@@ -1300,14 +1342,16 @@ Return ONLY valid JSON in this exact structure:
       "rows": [["val1", "val2", "val3"]]
     }
   ],
-  "markdownOutput": "The COMPLETE document in professional markdown format with ALL sections and tables rendered as markdown. Include the version history table at the top and sign-off table at the bottom. This must be copy-paste ready for Confluence.",
-  "summary": "One-line summary"
+  "markdownOutput": "The COMPLETE ${docTypeTitleCase} document in professional markdown format with ALL sections and tables rendered as markdown. Include the version history table at the top and sign-off table at the bottom. This must be copy-paste ready for Confluence.",
+  "summary": "One-line summary of this ${docTypeLabel}"
 }
 
-IMPORTANT:
-- Generate EVERY section listed above. Do not skip any.
-- Populate tables with realistic sample data based on the user's project context.
-- The markdownOutput MUST contain the full rendered document, not a summary.
+FINAL CHECKS before responding:
+1. Does the title say "${docTypeTitleCase}"? If not, fix it.
+2. Does the content match the specific template for ${docType}? If it looks like a test strategy, REDO it.
+3. Are ALL sections from the template above present? If any are missing, add them.
+4. Are tables populated with realistic sample data? If empty, fill them.
+5. Is the markdownOutput a COMPLETE document, not a summary? If it's abbreviated, expand it.
 - Use professional formatting: numbered sections, proper markdown tables, clear headers.`;
 
   const response = await callAI(systemPrompt, `Project/Context Information:\n${input}\n\nDocument Type Requested: ${docTypeLabel}`);
@@ -2422,15 +2466,44 @@ export default defineConfig({
 
     const tables = mockTables[mockType] ?? mockTables.test_strategy;
 
+    // Doc-type-specific sections
+    const mockSections: Record<string, Array<{heading: string; content: string; subsections: Array<{heading: string; content: string}>}>> = {
+      test_strategy: [
+        { heading: '1. Executive Summary', content: `This Test Strategy Document has been prepared for [Project Name] by the QA team at [Company Name]. It defines the strategic approach to testing across all quality levels.`, subsections: [{ heading: '1.1 Purpose', content: 'Define the testing approach, scope, levels, and objectives for the project.' }] },
+        { heading: '2. Test Objectives', content: 'Achieve >95% requirements coverage, <5% defect leakage to production, >80% automation rate for regression.', subsections: [] },
+        { heading: '3. Scope', content: 'All modules are in scope.', subsections: [{ heading: '3.1 In Scope', content: 'User Auth, Product Catalog, Cart, Checkout, Payment, Orders, Admin Panel' }, { heading: '3.2 Out of Scope', content: 'Third-party payment provider internal testing, legacy v1 system' }] },
+        { heading: '4. Automation Strategy', content: 'Target 80% automation for regression suite. Tool: Playwright for E2E, Jest for unit. ROI target: 3x within 6 months.', subsections: [] },
+      ],
+      test_summary: [
+        { heading: '1. Report Identifier', content: `Report ID: TSR-2026-001 | Release: v3.0.0 | Sprint: 24 | Period: Mar 1-14, 2026`, subsections: [] },
+        { heading: '2. Executive Summary', content: 'Testing of Release v3.0.0 is complete. 265 test cases executed with 93.8% pass rate. 27 defects found (2 Critical, 5 High). Recommendation: CONDITIONAL GO with 1 open High defect risk-accepted.', subsections: [] },
+        { heading: '3. Test Objective vs Achievement', content: 'See table below for objective-by-objective comparison.', subsections: [] },
+        { heading: '4. Go/No-Go Recommendation', content: 'CONDITIONAL GO — All critical defects resolved. One High defect (BUG-891) open with workaround available and risk accepted by Product Owner.', subsections: [] },
+      ],
+      traceability_matrix: [
+        { heading: '1. Traceability Overview', content: 'This RTM maps all requirements to test cases for [Project Name] v3.0.0. Overall coverage: 85%. P0 coverage: 100%. P1 coverage: 88%.', subsections: [] },
+        { heading: '2. Gap Analysis', content: 'REQ-003 (Password reset flow) has NO test coverage. Risk: High — password reset is a critical account recovery path.', subsections: [] },
+        { heading: '3. Coverage Improvement Plan', content: '1. Add test cases for REQ-003 (Priority: Immediate, Owner: QA1). 2. Complete partial coverage for REQ-002 SSO edge cases.', subsections: [] },
+      ],
+      test_closure: [
+        { heading: '1. Project Summary', content: 'Project: [Project Name] v3.0.0 | Test Period: Mar 1-28, 2026 | Team: 2 QA Engineers, 1 QA Lead | Effort: 45 person-days', subsections: [] },
+        { heading: '2. Quality KPIs', content: 'DRE: 94.7% (target: 95% — PARTIAL). Defect Leakage: 5.3% (3 production bugs in first week). Test Coverage: 87% (target: 85% — MET).', subsections: [] },
+        { heading: '3. Formal Sign-off', content: 'See sign-off table below. All stakeholders approved with conditions.', subsections: [] },
+      ],
+      defect_report: [
+        { heading: '1. Defect Overview', content: 'Total defects this release: 47. Critical: 3 (6.4%), High: 9 (19.1%), Medium: 22 (46.8%), Low: 13 (27.7%). Trend: 15% reduction from previous release.', subsections: [] },
+        { heading: '2. Root Cause Analysis', content: 'Top root cause: Coding Errors (51%). Second: Requirements Gaps (23%). Third: Integration Issues (12%).', subsections: [] },
+        { heading: '3. Pareto Analysis', content: 'Authentication module accounts for 34% of all defects. Combined with Payments (21%), these two modules represent 55% of all bugs (top 20% of modules = 80% of defects — Pareto confirmed).', subsections: [] },
+      ],
+    };
+
+    const sections = mockSections[mockType] ?? mockSections.test_strategy;
+
     return JSON.stringify({
       document: { title: mockTitle, type: mockType, version: '1.0', author: 'QA Team', date: dateStr, status: 'Draft' },
-      sections: [
-        { heading: '1. Executive Summary', content: `This ${mockTitle} has been prepared for [Project Name] by the QA team at [Company Name]. It covers all testing activities and provides a comprehensive overview of quality assurance processes, metrics, and recommendations.`, subsections: [{ heading: '1.1 Purpose', content: 'Define the approach, scope, and objectives of testing activities to ensure product quality meets enterprise standards.' }] },
-        { heading: '2. Scope & Objectives', content: 'All modules identified in the project scope are covered by this document. Testing objectives are aligned with business goals and quality KPIs.', subsections: [{ heading: '2.1 In Scope', content: 'User Authentication, Product Catalog, Shopping Cart, Checkout, Payment Integration, Order Management, Admin Panel' }, { heading: '2.2 Out of Scope', content: 'Third-party payment provider internal testing, legacy v1 system maintenance' }] },
-        { heading: '3. Detailed Analysis', content: 'The following sections provide detailed breakdowns of all quality metrics, test results, and risk assessments as applicable to this document type.', subsections: [] },
-      ],
+      sections,
       tables,
-      markdownOutput: `# ${mockTitle}\n\n**[Company Name]** | **[Project Name]**\n\n| Version | Date | Author | Change Description |\n|---------|------|--------|-------------------|\n| 1.0 | ${dateStr} | QA Lead | Initial draft |\n\n---\n\n## 1. Executive Summary\n\nThis document has been prepared for [Project Name] by the QA team at [Company Name].\n\n## 2. Scope & Objectives\n\nAll modules are in scope for testing activities.\n\n---\n\n## Document Approval\n\n| Role | Name | Signature | Date |\n|------|------|-----------|------|\n| QA Lead | ____________ | ____________ | ____________ |\n| Dev Lead | ____________ | ____________ | ____________ |\n| Product Owner | ____________ | ____________ | ____________ |`,
+      markdownOutput: `# ${mockTitle}\n\n**[Company Name]** | **[Project Name]**\n\n| Version | Date | Author | Change Description |\n|---------|------|--------|-------------------|\n| 1.0 | ${dateStr} | QA Lead | Initial draft |\n\n---\n\n${sections.map(s => `## ${s.heading}\n\n${s.content}\n${s.subsections.map(ss => `### ${ss.heading}\n\n${ss.content}`).join('\n\n')}`).join('\n\n---\n\n')}\n\n---\n\n## Document Approval\n\n| Role | Name | Signature | Date |\n|------|------|-----------|------|\n| QA Lead | ____________ | ____________ | ____________ |\n| Dev Lead | ____________ | ____________ | ____________ |\n| Product Owner | ____________ | ____________ | ____________ |`,
       summary: `Enterprise-grade ${mockTitle.toLowerCase()} with comprehensive metrics, tables, and sign-off sections`,
     });
   }
