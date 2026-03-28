@@ -712,62 +712,128 @@ Return ONLY valid JSON:
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 11. AUTOMATION SCRIPT GENERATOR (NEW!)
+// 11. AUTOMATION SCRIPT GENERATOR — Enterprise POM Architecture
 // ═══════════════════════════════════════════════════════════════
 export async function generateAutomationScript(scenario: string, framework: 'playwright' | 'cypress' | 'selenium-js' | 'puppeteer' | 'webdriverio', options: { language: 'typescript' | 'javascript'; includePageObject: boolean; includeHelpers: boolean; includeCIConfig: boolean }) {
-  const systemPrompt = `You are a senior test automation engineer. Generate production-ready automation scripts.
+  const frameworkRules: Record<string, string> = {
+    playwright: `PLAYWRIGHT-SPECIFIC RULES:
+- Use @playwright/test (NOT the legacy 'playwright' library)
+- Locators: page.getByTestId() first, then page.getByRole(), page.getByText(), page.getByLabel(). NEVER use page.$() or fragile CSS nth-child selectors
+- Waits: Rely on Playwright's auto-waiting. NEVER use page.waitForTimeout() with arbitrary ms
+- Assertions: Use expect() from @playwright/test with .toBeVisible(), .toHaveText(), .toHaveURL(), etc.
+- Config: Include playwright.config.ts with: parallel workers, retries: process.env.CI ? 2 : 0, trace: 'on-first-retry', screenshot: 'only-on-failure', video: 'on-first-retry'
+- Use test.describe() for grouping, test.beforeEach() for setup
+- Use test.use({ storageState }) for auth state reuse`,
+    cypress: `CYPRESS-SPECIFIC RULES:
+- NEVER use async/await with cy. commands (Cypress is NOT promise-based)
+- Use cy.intercept() for network stubbing (NOT cy.server() which is deprecated)
+- Use cy.session() for auth state caching across tests
+- Locators: cy.getByTestId() (via custom command) first, then cy.findByRole(), cy.contains()
+- Waits: Use .should() assertions for retry-ability. NEVER use cy.wait(ms) with arbitrary delays
+- Include cypress.config.ts and support/commands.ts with custom commands
+- Use Cypress.env() for environment variables`,
+    'selenium-js': `SELENIUM-JS RULES:
+- Use selenium-webdriver with Builder pattern
+- Use By.css('[data-testid="..."]') for locators. NEVER use fragile XPath
+- Add explicit waits with driver.wait(until.elementLocated()) — NEVER use driver.sleep()
+- Use Page Object Model with methods returning this for chaining`,
+    puppeteer: `PUPPETEER RULES:
+- Use page.waitForSelector() before interactions. NEVER use page.waitForTimeout()
+- Use page.$eval() for assertions
+- Use data-testid selectors via page.$('[data-testid="..."]')`,
+    webdriverio: `WEBDRIVERIO RULES:
+- Use $('[data-testid="..."]') locator strategy
+- Use .waitForDisplayed() for waits. NEVER use browser.pause() with arbitrary ms
+- Use Page Object pattern with get accessors for elements`,
+  };
+
+  const pomInstruction = options.includePageObject ? `
+REQUIRED PROJECT STRUCTURE — generate ALL of these files:
+tests/
+├── pages/
+│   ├── BasePage.ts       # Abstract base: navigation, waitForPageLoad, screenshot, common interactions
+│   └── [Feature]Page.ts  # Feature page: locators as private getters, public action methods, JSDoc on every method
+├── specs/
+│   └── [feature].spec.ts # Test file: describe/it blocks, beforeEach/afterEach, independent tests
+├── fixtures/
+│   └── testData.ts       # Test data constants: valid/invalid/edge-case data objects
+├── utils/
+│   └── helpers.ts        # Auth helpers, custom expect wrappers, retry logic, date generators
+└── config/
+    └── ${framework === 'cypress' ? 'cypress' : 'playwright'}.config.ts  # Framework configuration
+
+PAGE OBJECT RULES:
+- BasePage: constructor takes page/driver, has methods: goto(path), waitForPageLoad(), takeScreenshot(name), getTitle()
+- Feature pages extend BasePage
+- Locators are PRIVATE getter properties (not public strings) — encapsulate the selectors
+- Each action method has JSDoc explaining what it does, parameters, and return value
+- Action methods return the page object (this) for chaining where appropriate
+- NEVER expose raw selectors to test files — all interaction goes through page object methods` : 'Generate test code without Page Object Model — inline everything in the test file.';
+
+  const ciInstruction = options.includeCIConfig ? `
+INCLUDE CI/CD CONFIG:
+- GitHub Actions YAML (.github/workflows/e2e.yml)
+- Trigger on push and pull_request to main
+- Install dependencies, install browsers (for Playwright), run tests
+- Upload test results and artifacts (screenshots, videos, traces) on failure
+- Matrix strategy for multiple browsers if applicable` : '';
+
+  const helperInstruction = options.includeHelpers ? `
+INCLUDE HELPER UTILITIES (tests/utils/helpers.ts):
+- Auth helper: login function that returns auth token or sets storage state
+- Custom assertion helpers: expectToastMessage(), expectFormError(), expectRedirectTo()
+- Retry helper: retryAction(fn, maxRetries, delayMs) for flaky external service calls
+- Data generator: randomEmail(), randomPassword(), futureDate(), pastDate()
+- Environment config reader: getEnvVar(name, fallback)` : '';
+
+  const systemPrompt = `You are a principal test automation architect at a Fortune 500 company. Generate production-ready, immediately-runnable automation projects.
 
 Framework: ${framework}
 Language: ${options.language}
 
-STRICT CODE QUALITY RULES:
-1. Use ONLY real, documented API methods for ${framework}. Do NOT invent methods or parameters.
-2. Include proper imports at the top of every file.
-3. Use explicit waits instead of arbitrary sleep/delays.
-4. Add meaningful error messages to assertions.
-5. Use realistic but safe selectors (data-testid preferred, then aria-label, then CSS selectors — never fragile XPath).
-6. Include proper setup/teardown (beforeEach/afterEach).
-7. Handle common failure scenarios (element not found, timeout, network error).
-8. Add JSDoc comments explaining what each test does and why.
-9. The code must be copy-paste runnable after installing dependencies — test this mentally before outputting.
-10. Never use deprecated APIs. Use the latest stable API for ${framework}.
+${frameworkRules[framework] || ''}
 
-${framework === 'playwright' ? 'Use @playwright/test, not the older playwright library. Use page.getByRole(), page.getByText(), page.getByTestId() locators.' : ''}
-${framework === 'cypress' ? 'Use cy.get(), cy.contains(), cy.intercept() for network stubbing. Use Cypress best practices.' : ''}
-${framework === 'selenium-js' ? 'Use selenium-webdriver with Builder pattern. Use By.css() selectors. Add explicit waits with until.' : ''}
+ABSOLUTE CODE QUALITY RULES (enforce ALL):
+1. LOCATORS: data-testid first → getByRole/getByText → aria-label → CSS. NEVER use nth-child, nth-of-type, or XPath
+2. WAITS: Use auto-waiting or explicit conditions. NEVER use sleep()/waitForTimeout()/pause() with arbitrary ms delays
+3. ASSERTIONS: Specific with custom error messages: expect(title).toBe('Dashboard', { message: 'User should see dashboard after login' })
+4. INDEPENDENCE: Each test is independent — no shared state, no order dependency, no reliance on other test results
+5. SETUP/TEARDOWN: beforeEach creates fresh state, afterEach cleans up (screenshots on failure, logout, etc.)
+6. ENVIRONMENT: All URLs and credentials via environment variables or config — NEVER hardcoded. Use process.env.BASE_URL or Cypress.env()
+7. IMPORTS: Every file has complete imports at the top. No missing dependencies.
+8. JSDOC: Every page object method and test case has a JSDoc comment explaining what and why
+9. RUNNABLE: Mentally verify the code runs after \`npm install && npx playwright install\` (or equivalent). No missing files, no undefined references.
+10. NO DEPRECATED APIS: Use the latest stable API for ${framework}
 
-Generate a complete, runnable automation test suite that includes:
-- Test file with multiple test cases
-${options.includePageObject ? '- Page Object Model classes' : ''}
-${options.includeHelpers ? '- Helper/utility functions (waits, assertions, data generators)' : ''}
-${options.includeCIConfig ? '- CI/CD config (GitHub Actions YAML)' : ''}
-- Proper error handling, retries, and waits
-- Meaningful assertions
-- Test data management
-- Clear comments explaining each section
+${pomInstruction}
+
+${helperInstruction}
+
+${ciInstruction}
 
 Return ONLY valid JSON:
 {
   "framework": "${framework}",
   "language": "${options.language}",
+  "projectStructure": "ASCII tree of the generated project structure",
   "files": [
     {
-      "filename": "tests/example.spec.ts",
-      "description": "What this file does",
-      "code": "// complete file content"
+      "filename": "tests/pages/BasePage.ts",
+      "description": "What this file does and its role in the architecture",
+      "fileType": "page_object|spec|fixture|helper|config|ci",
+      "code": "// Complete, runnable file content with JSDoc comments"
     }
   ],
   "packageJson": {
-    "scripts": {},
-    "devDependencies": {}
+    "scripts": { "test": "...", "test:headed": "...", "test:debug": "..." },
+    "devDependencies": { "${framework === 'cypress' ? 'cypress' : '@playwright/test'}": "^latest" }
   },
-  "setupInstructions": ["Step 1 to set up and run"],
-  "runCommand": "npx playwright test"
-}
+  "setupInstructions": ["npm install", "npx playwright install (if Playwright)"],
+  "runCommand": "npx playwright test",
+  "debugCommand": "npx playwright test --debug"
+}`;
 
-Make the code production-quality, well-structured, and immediately runnable.`;
-
-  const response = await callAI(systemPrompt, `Test Scenario:\n${scenario}`);
+  const response = await callAI(systemPrompt, `Test Scenario to Automate:\n${scenario}`);
   return extractJSON(response);
 }
 
@@ -1530,8 +1596,286 @@ setup.afterAll(async ({ request }) => {
   if (systemPrompt.includes('sprint test plan')) {
     return JSON.stringify({ testPlan: { sprintName: 'Sprint 24', objective: 'Test new features and regression', scope: 'Authentication, Billing, Dashboard', riskAssessment: 'Medium risk', estimatedHours: 40, startDate: 'Day 1', testEnvironments: ['staging', 'QA'] }, stories: [], regressionSuite: [], schedule: [{ day: 1, activities: ['Setup test environment', 'Review stories'], milestone: 'Test prep complete' }], entryExitCriteria: { entry: ['Build deployed to staging'], exit: ['All P0/P1 tests pass'] }, risks: [], markdownOutput: '# Sprint 24 Test Plan\n...' });
   }
-  if (systemPrompt.includes('automation')) {
-    return JSON.stringify({ framework: 'playwright', language: 'typescript', files: [{ filename: 'tests/login.spec.ts', description: 'Login automation tests', code: 'import { test, expect } from "@playwright/test";\n\ntest("should login successfully", async ({ page }) => {\n  await page.goto("/login");\n  await page.fill("#email", "user@test.com");\n  await page.fill("#password", "Pass123!");\n  await page.click("button[type=submit]");\n  await expect(page).toHaveURL("/dashboard");\n});' }], packageJson: { scripts: { test: 'playwright test' }, devDependencies: { '@playwright/test': '^1.40.0' } }, setupInstructions: ['npm install', 'npx playwright install'], runCommand: 'npx playwright test' });
+  if (systemPrompt.includes('principal test automation architect') || systemPrompt.includes('automation')) {
+    return JSON.stringify({
+      framework: 'playwright',
+      language: 'typescript',
+      projectStructure: `tests/
+├── pages/
+│   ├── BasePage.ts
+│   └── LoginPage.ts
+├── specs/
+│   └── login.spec.ts
+├── fixtures/
+│   └── testData.ts
+├── utils/
+│   └── helpers.ts
+└── config/
+    └── playwright.config.ts`,
+      files: [
+        {
+          filename: 'tests/pages/BasePage.ts',
+          description: 'Abstract base page with common navigation, wait, and screenshot helpers',
+          fileType: 'page_object',
+          code: `import { Page, expect } from '@playwright/test';
+
+/**
+ * BasePage — abstract base for all page objects.
+ * Provides common navigation, wait, and screenshot utilities.
+ */
+export abstract class BasePage {
+  constructor(protected readonly page: Page) {}
+
+  /** Navigate to a path relative to BASE_URL */
+  async goto(path: string): Promise<void> {
+    await this.page.goto(path);
+  }
+
+  /** Wait for the page to reach 'networkidle' state */
+  async waitForPageLoad(): Promise<void> {
+    await this.page.waitForLoadState('networkidle');
+  }
+
+  /** Capture a named screenshot (saved to test-results/) */
+  async takeScreenshot(name: string): Promise<void> {
+    await this.page.screenshot({ path: \`test-results/screenshots/\${name}.png\`, fullPage: true });
+  }
+
+  /** Get the page title */
+  async getTitle(): Promise<string> {
+    return this.page.title();
+  }
+
+  /** Assert the current URL matches the expected path */
+  async expectURL(path: string): Promise<void> {
+    await expect(this.page).toHaveURL(new RegExp(path));
+  }
+}`,
+        },
+        {
+          filename: 'tests/pages/LoginPage.ts',
+          description: 'Page Object for the login page — encapsulates all locators and actions',
+          fileType: 'page_object',
+          code: `import { Page, Locator, expect } from '@playwright/test';
+import { BasePage } from './BasePage';
+
+/**
+ * LoginPage — encapsulates the login form interactions.
+ * Locators use data-testid first, then getByRole/getByLabel.
+ */
+export class LoginPage extends BasePage {
+  // ── Private locators (never exposed to tests) ──────────────
+  private get emailInput(): Locator {
+    return this.page.getByLabel('Email');
+  }
+  private get passwordInput(): Locator {
+    return this.page.getByLabel('Password');
+  }
+  private get submitButton(): Locator {
+    return this.page.getByRole('button', { name: 'Sign in' });
+  }
+  private get errorBanner(): Locator {
+    return this.page.getByRole('alert');
+  }
+
+  // ── Public actions ─────────────────────────────────────────
+
+  /** Navigate to the login page */
+  async navigate(): Promise<this> {
+    await this.goto('/login');
+    await this.waitForPageLoad();
+    return this;
+  }
+
+  /**
+   * Fill in email and password and submit the form.
+   * @param email - User's email address
+   * @param password - User's password
+   */
+  async login(email: string, password: string): Promise<void> {
+    await this.emailInput.fill(email);
+    await this.passwordInput.fill(password);
+    await this.submitButton.click();
+  }
+
+  /** Assert that the user was redirected to the dashboard */
+  async expectLoginSuccess(): Promise<void> {
+    await expect(this.page).toHaveURL(/\\/dashboard/, {
+      timeout: 10000,
+    });
+  }
+
+  /** Assert that an error message is displayed */
+  async expectLoginError(message?: string): Promise<void> {
+    await expect(this.errorBanner).toBeVisible();
+    if (message) {
+      await expect(this.errorBanner).toContainText(message);
+    }
+  }
+}`,
+        },
+        {
+          filename: 'tests/fixtures/testData.ts',
+          description: 'Test data constants — valid, invalid, and edge-case values',
+          fileType: 'fixture',
+          code: `/**
+ * Test data for login flow tests.
+ * All values are safe for use in any environment.
+ */
+export const VALID_USER = {
+  email: 'qa.tester@company.com',
+  password: 'SecureP@ss123!',
+  name: 'QA Tester',
+} as const;
+
+export const INVALID_CREDENTIALS = {
+  wrongPassword: { email: VALID_USER.email, password: 'WrongPassword!' },
+  wrongEmail: { email: 'nonexistent@company.com', password: 'AnyPass123!' },
+  emptyEmail: { email: '', password: 'AnyPass123!' },
+  emptyPassword: { email: VALID_USER.email, password: '' },
+  sqlInjection: { email: "' OR '1'='1'; --", password: 'anything' },
+  xssPayload: { email: '<script>alert("xss")</script>@test.com', password: 'Pass123!' },
+} as const;`,
+        },
+        {
+          filename: 'tests/utils/helpers.ts',
+          description: 'Auth helpers, custom assertions, and utility functions',
+          fileType: 'helper',
+          code: `import { Page, expect } from '@playwright/test';
+
+/**
+ * Authenticate a user and return to the target page.
+ * Uses the login form (for e2e) — switch to API auth for speed in non-auth tests.
+ */
+export async function loginViaUI(page: Page, email: string, password: string): Promise<void> {
+  await page.goto('/login');
+  await page.getByLabel('Email').fill(email);
+  await page.getByLabel('Password').fill(password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await expect(page).toHaveURL(/\\/dashboard/);
+}
+
+/** Assert a toast notification appears with the expected message */
+export async function expectToast(page: Page, message: string): Promise<void> {
+  const toast = page.getByRole('status');
+  await expect(toast).toContainText(message, { timeout: 5000 });
+}
+
+/** Generate a random email for test isolation */
+export function randomEmail(): string {
+  return \`test.\${Date.now()}.\${Math.random().toString(36).slice(2, 7)}@test.com\`;
+}
+
+/** Read environment variable with fallback */
+export function getEnvVar(name: string, fallback: string): string {
+  return process.env[name] || fallback;
+}`,
+        },
+        {
+          filename: 'tests/specs/login.spec.ts',
+          description: 'Login flow test suite — independent tests covering happy path, validation, security',
+          fileType: 'spec',
+          code: `import { test, expect } from '@playwright/test';
+import { LoginPage } from '../pages/LoginPage';
+import { VALID_USER, INVALID_CREDENTIALS } from '../fixtures/testData';
+
+test.describe('Login Flow', () => {
+  let loginPage: LoginPage;
+
+  test.beforeEach(async ({ page }) => {
+    loginPage = new LoginPage(page);
+    await loginPage.navigate();
+  });
+
+  /** Happy path: valid credentials should redirect to dashboard */
+  test('successful login with valid credentials', async ({ page }) => {
+    await loginPage.login(VALID_USER.email, VALID_USER.password);
+    await loginPage.expectLoginSuccess();
+
+    // Verify user info is displayed in the header
+    await expect(page.getByText(VALID_USER.name)).toBeVisible();
+  });
+
+  /** Negative: wrong password should show error, not crash */
+  test('wrong password shows error message', async () => {
+    await loginPage.login(
+      INVALID_CREDENTIALS.wrongPassword.email,
+      INVALID_CREDENTIALS.wrongPassword.password,
+    );
+    await loginPage.expectLoginError('Incorrect email or password');
+  });
+
+  /** Negative: empty email should not submit */
+  test('empty email prevents submission', async ({ page }) => {
+    await loginPage.login('', VALID_USER.password);
+    // Should stay on login page (HTML5 validation prevents submit)
+    await expect(page).toHaveURL(/\\/login/);
+  });
+
+  /** Security: SQL injection attempt should fail safely */
+  test('SQL injection in email returns safe error', async () => {
+    await loginPage.login(
+      INVALID_CREDENTIALS.sqlInjection.email,
+      INVALID_CREDENTIALS.sqlInjection.password,
+    );
+    await loginPage.expectLoginError();
+    // Must not show SQL error or stack trace
+  });
+});`,
+        },
+        {
+          filename: 'playwright.config.ts',
+          description: 'Playwright configuration — parallel workers, retries on CI, artifacts on failure',
+          fileType: 'config',
+          code: `import { defineConfig, devices } from '@playwright/test';
+
+export default defineConfig({
+  testDir: './tests/specs',
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
+  workers: process.env.CI ? 2 : undefined,
+  reporter: [
+    ['html', { open: 'never' }],
+    ['list'],
+  ],
+  use: {
+    baseURL: process.env.BASE_URL || 'http://localhost:3000',
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+    video: 'on-first-retry',
+    actionTimeout: 10000,
+    navigationTimeout: 30000,
+  },
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+  ],
+});`,
+        },
+      ],
+      packageJson: {
+        scripts: {
+          test: 'playwright test',
+          'test:headed': 'playwright test --headed',
+          'test:debug': 'playwright test --debug',
+          'test:ui': 'playwright test --ui',
+          'test:report': 'playwright show-report',
+        },
+        devDependencies: {
+          '@playwright/test': '^1.48.0',
+          'typescript': '^5.3.0',
+        },
+      },
+      setupInstructions: [
+        'npm install',
+        'npx playwright install --with-deps',
+        'cp .env.example .env.local  # Set BASE_URL',
+        'npx playwright test  # Run all tests',
+      ],
+      runCommand: 'npx playwright test',
+      debugCommand: 'npx playwright test --debug',
+    });
   }
   if (systemPrompt.includes('coverage expert')) {
     return JSON.stringify({ analysis: { existingCoverage: 'Basic happy path tests', gaps: ['No negative tests', 'No edge cases', 'No security tests'], currentScore: 45, projectedScore: 78 }, newTestCases: [{ category: 'negative', title: 'Invalid input handling', description: 'Test with malformed data', steps: ['Submit empty form', 'Check error messages'], expectedResult: 'Proper validation errors shown', priority: 'P1', whyNeeded: 'Could miss validation bugs' }], totalNewTests: 5, coverageImprovement: '+33%' });

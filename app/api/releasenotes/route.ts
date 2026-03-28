@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
 
     if (projectId) {
       await prisma.generatedContent.create({
-        data: { projectId, type: 'releasenotes', input, output: result },
+        data: { projectId, type: 'releasenotes', input, output: result as unknown as Parameters<typeof prisma.generatedContent.create>[0]['data']['output'] },
       });
     }
 

@@ -1,14 +1,24 @@
 'use client';
 
-import { Code2, Terminal } from 'lucide-react';
+import { Code2, Terminal, Download, FolderTree } from 'lucide-react';
 import TopBar from '@/components/layout/TopBar';
 import GeneratorPage from '@/components/GeneratorPage';
 import CodeBlock from '@/components/ui/CodeBlock';
+import { cn } from '@/lib/utils';
+
+const FILE_TYPE_META: Record<string, { label: string; color: string }> = {
+  page_object: { label: 'Page Object', color: 'bg-accent-violet/10 text-accent-violet border-accent-violet/20' },
+  spec:        { label: 'Test Spec',   color: 'bg-accent-emerald/10 text-accent-emerald border-accent-emerald/20' },
+  fixture:     { label: 'Fixture',     color: 'bg-accent-amber/10 text-accent-amber border-accent-amber/20' },
+  helper:      { label: 'Helper',      color: 'bg-accent-blue/10 text-accent-blue border-accent-blue/20' },
+  config:      { label: 'Config',      color: 'bg-bg-tertiary text-text-muted border-border' },
+  ci:          { label: 'CI/CD',       color: 'bg-accent-cyan/10 text-accent-cyan border-accent-cyan/20' },
+};
 
 export default function AutomationPage() {
   return (
     <div className="min-h-screen">
-      <TopBar title="Automation Scripts" subtitle="Generate ready-to-run test automation code" />
+      <TopBar title="Automation Scripts" subtitle="Enterprise Page Object Model projects" />
       <GeneratorPage
         title="Generate Automation Script"
         subtitle="Describe the test scenario to automate"
@@ -44,64 +54,103 @@ export default function AutomationPage() {
           { id: 'includeCIConfig', label: 'CI/CD config (GitHub Actions)', type: 'toggle', defaultValue: false },
         ]}
         exampleInputs={[
-          { label: 'Login Flow', value: 'User login flow: Navigate to login page, enter valid email and password, click submit, verify redirect to dashboard, check user name displayed in header, verify auth token in cookies' },
-          { label: 'Search & Filter', value: 'Product search and filtering: Go to products page, type search query, verify results update, apply price range filter, apply category filter, sort by price, verify correct ordering, clear all filters, verify reset' },
-          { label: 'Form Validation', value: 'Registration form validation: Try submitting empty form (verify all required field errors), enter invalid email format (verify error), enter short password (verify strength error), enter mismatched passwords (verify error), fill all fields correctly (verify success)' },
+          { label: 'Login Flow', value: 'User login flow:\n1. Navigate to login page\n2. Enter valid email (qa.tester@company.com) and password\n3. Click submit\n4. Verify redirect to dashboard\n5. Check user name displayed in header\n6. Verify auth cookie is set\n\nAlso test:\n- Invalid credentials show error\n- Empty fields show validation\n- SQL injection in email is safe' },
+          { label: 'Search & Filter', value: 'Product search and filtering:\n1. Go to /products page\n2. Type "laptop" in search field\n3. Verify results update (show only laptops)\n4. Apply price range filter ($500-$1500)\n5. Apply category filter "Electronics"\n6. Sort by price ascending\n7. Verify correct ordering\n8. Clear all filters\n9. Verify full product list restored' },
+          { label: 'Form Validation', value: 'Registration form validation:\n1. Submit empty form → verify all required field errors\n2. Enter invalid email format → verify email error\n3. Enter password < 8 chars → verify strength error\n4. Enter mismatched passwords → verify match error\n5. Fill all fields correctly → verify success redirect\n6. Try registering with existing email → verify duplicate error' },
         ]}
         renderResult={(result) => {
           const files = (result.files || []) as Array<Record<string, string>>;
-          const pkg = result.packageJson as Record<string, Record<string, string>>;
+          const pkg = result.packageJson as Record<string, Record<string, string>> | undefined;
           const instructions = (result.setupInstructions || []) as string[];
           const runCmd = result.runCommand as string;
+          const debugCmd = result.debugCommand as string | undefined;
+          const structure = result.projectStructure as string | undefined;
+
+          function downloadAll() {
+            files.forEach((file) => {
+              const blob = new Blob([file.code], { type: 'text/plain' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = file.filename.split('/').pop() || 'file.ts';
+              a.click();
+              URL.revokeObjectURL(url);
+            });
+          }
+
+          // Group files by type
+          const filesByType: Record<string, typeof files> = {};
+          files.forEach((f) => {
+            const type = f.fileType || 'spec';
+            if (!filesByType[type]) filesByType[type] = [];
+            filesByType[type].push(f);
+          });
 
           return (
             <div className="space-y-4">
               {/* Header */}
               <div className="glass-panel p-5">
                 <div className="flex items-center gap-3 mb-2">
-                  <span className="badge bg-accent-coral/15 text-accent-coral border-accent-coral/20 font-mono">{result.framework as string}</span>
+                  <span className="badge bg-accent-coral/15 text-accent-coral border-accent-coral/20 font-mono font-bold">{result.framework as string}</span>
                   <span className="badge bg-bg-tertiary text-text-muted border-border font-mono">{result.language as string}</span>
+                  <span className="text-xs text-text-muted">{files.length} files generated</span>
                 </div>
-                <p className="text-xs text-text-muted">{files.length} files generated</p>
 
-                {/* Download all files button */}
-                <button
-                  onClick={() => {
-                    files.forEach((file: Record<string, string>) => {
-                      const blob = new Blob([file.code], { type: 'text/plain' });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = file.filename.split('/').pop() || 'test.ts';
-                      a.click();
-                      URL.revokeObjectURL(url);
-                    });
-                  }}
-                  className="btn-primary text-xs mt-3 w-full"
-                >
-                  📁 Download All Files
+                {/* File type summary */}
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {Object.entries(filesByType).map(([type, typeFiles]) => {
+                    const meta = FILE_TYPE_META[type] ?? { label: type, color: 'bg-bg-tertiary text-text-muted border-border' };
+                    return (
+                      <span key={type} className={cn('text-[10px] px-2 py-0.5 rounded-md border font-medium', meta.color)}>
+                        {meta.label} ({typeFiles.length})
+                      </span>
+                    );
+                  })}
+                </div>
+
+                <button onClick={downloadAll} className="btn-primary text-xs w-full">
+                  <Download className="w-3.5 h-3.5" /> Download All Files
                 </button>
               </div>
+
+              {/* Project Structure */}
+              {structure && (
+                <div className="glass-panel p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <FolderTree className="w-4 h-4 text-accent-blue" />
+                    <span className="text-xs font-semibold text-text-secondary">Project Structure</span>
+                  </div>
+                  <pre className="text-xs text-text-muted font-mono whitespace-pre leading-relaxed">{structure}</pre>
+                </div>
+              )}
 
               {/* Setup Instructions */}
               {instructions.length > 0 && (
                 <div className="glass-panel p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <Terminal className="w-4 h-4 text-accent-emerald" />
-                    <span className="text-xs font-semibold text-text-secondary">Setup Instructions</span>
+                    <span className="text-xs font-semibold text-text-secondary">Setup & Run</span>
                   </div>
                   {instructions.map((step, i) => (
                     <div key={i} className="flex items-start gap-2 mb-1">
-                      <span className="text-xs font-mono text-accent-blue">{i + 1}.</span>
+                      <span className="text-xs font-mono text-accent-blue flex-shrink-0">{i + 1}.</span>
                       <code className="text-xs text-text-secondary font-mono">{step}</code>
                     </div>
                   ))}
-                  {runCmd && (
-                    <div className="mt-3 p-2 rounded-lg bg-bg-tertiary">
-                      <span className="text-[10px] text-text-muted">Run tests:</span>
-                      <code className="text-xs text-accent-emerald font-mono ml-2">{runCmd}</code>
-                    </div>
-                  )}
+                  <div className="flex gap-3 mt-3">
+                    {runCmd && (
+                      <div className="flex-1 p-2 rounded-lg bg-bg-tertiary">
+                        <span className="text-[10px] text-text-muted">Run tests:</span>
+                        <code className="text-xs text-accent-emerald font-mono ml-2">{runCmd}</code>
+                      </div>
+                    )}
+                    {debugCmd && (
+                      <div className="flex-1 p-2 rounded-lg bg-bg-tertiary">
+                        <span className="text-[10px] text-text-muted">Debug:</span>
+                        <code className="text-xs text-accent-amber font-mono ml-2">{debugCmd}</code>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -109,18 +158,31 @@ export default function AutomationPage() {
               {pkg && (
                 <CodeBlock
                   code={JSON.stringify({ scripts: pkg.scripts, devDependencies: pkg.devDependencies }, null, 2)}
-                  filename="package.json (add to yours)"
+                  filename="package.json (merge into yours)"
                   language="json"
                 />
               )}
 
-              {/* Generated Files */}
-              {files.map((file, i) => (
-                <div key={i} className="space-y-1">
-                  <p className="text-xs text-text-muted">{file.description}</p>
-                  <CodeBlock code={file.code} filename={file.filename} language={result.language as string || 'typescript'} />
-                </div>
-              ))}
+              {/* Generated Files — grouped by type */}
+              {Object.entries(filesByType).map(([type, typeFiles]) => {
+                const meta = FILE_TYPE_META[type] ?? { label: type, color: 'bg-bg-tertiary text-text-muted border-border' };
+                return (
+                  <div key={type} className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className={cn('text-[10px] px-2 py-0.5 rounded-md border font-medium', meta.color)}>
+                        {meta.label}
+                      </span>
+                      <span className="text-xs text-text-muted">{typeFiles.length} file{typeFiles.length > 1 ? 's' : ''}</span>
+                    </div>
+                    {typeFiles.map((file, i) => (
+                      <div key={i} className="space-y-1">
+                        <p className="text-xs text-text-muted">{file.description}</p>
+                        <CodeBlock code={file.code} filename={file.filename} language={result.language as string || 'typescript'} />
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
             </div>
           );
         }}
