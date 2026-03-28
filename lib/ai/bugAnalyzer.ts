@@ -364,116 +364,119 @@ Return ONLY valid JSON:
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 6. TEST CASE GENERATOR FROM USER STORY (NEW!)
+// 6. TEST CASE GENERATOR FROM USER STORY — IEEE 829 / TestRail Standard
 // ═══════════════════════════════════════════════════════════════
 export async function generateTestCasesFromStory(userStory: string, options: { includeNegative: boolean; includeEdgeCases: boolean; includeSecurity: boolean; includePerformance: boolean; includeAccessibility: boolean; framework?: string }) {
-  // Build the category list based on what user selected
-  const selectedCategories: string[] = ['positive']; // Always include positive/happy path
+  const selectedCategories: string[] = ['positive'];
   if (options.includeNegative) selectedCategories.push('negative');
   if (options.includeEdgeCases) selectedCategories.push('edge_case');
   if (options.includeSecurity) selectedCategories.push('security');
   if (options.includePerformance) selectedCategories.push('performance');
   if (options.includeAccessibility) selectedCategories.push('accessibility');
 
-  // Calculate how many tests per category
   const testsPerCategory = selectedCategories.length === 1 ? 8 : Math.max(3, Math.floor(15 / selectedCategories.length));
   const totalTarget = testsPerCategory * selectedCategories.length;
 
   const categoryInstructions: Record<string, string> = {
-    positive: `POSITIVE/HAPPY PATH TESTS (generate ${testsPerCategory} tests):
-- Successful completion of the main user flow
-- Correct data saved/displayed after actions
-- Proper UI state changes and feedback messages
-- Valid inputs with different valid data combinations
-- Verify all acceptance criteria are met`,
-    negative: `NEGATIVE TESTS (generate ${testsPerCategory} tests):
-- Invalid input formats (wrong email, short password, SQL in fields)
-- Missing required fields (submit with each field empty)
-- Unauthorized access attempts (wrong role, expired session, no auth)
-- Error state handling (API failures, timeout, network disconnect)
-- Duplicate submissions and race conditions
-- Exceeding rate limits or quotas`,
-    edge_case: `EDGE CASE TESTS (generate ${testsPerCategory} tests):
-- Boundary values (min length, max length, exactly at limit, one over limit)
-- Empty states (no data, first time user, cleared data)
-- Special characters in all input fields (unicode, emoji, HTML tags, quotes)
-- Concurrent actions (double-click submit, multi-tab operations)
-- Browser back/forward button during flow
-- Very long input strings (1000+ characters)
-- Zero, negative numbers, decimal numbers where integers expected`,
-    security: `SECURITY TESTS (generate ${testsPerCategory} tests):
-- XSS: inject <script>alert('xss')</script> in every text input field
-- SQL Injection: inject ' OR '1'='1 in input fields
-- CSRF: verify anti-CSRF tokens are present and validated
-- Authentication bypass: access protected routes without valid session
-- Authorization: access other users' data by manipulating IDs/URLs
-- Sensitive data exposure: check passwords not in logs/URLs, PII masked
-- Session: verify timeout, invalidation on logout, no reuse of old tokens`,
-    performance: `PERFORMANCE TESTS (generate ${testsPerCategory} tests):
-- Page/component load time under normal conditions (target: <2 seconds)
-- Response time with large datasets (1000+ records, paginated)
-- Concurrent user simulation (10, 50, 100 simultaneous users)
-- Memory usage monitoring during extended sessions
-- File upload/download performance at size limits
-- Database query performance with complex filters
-- API response time under load (p50, p95, p99 targets)`,
-    accessibility: `ACCESSIBILITY TESTS (generate ${testsPerCategory} tests):
-- Keyboard navigation: Tab through all interactive elements in logical order
-- Screen reader: all images have alt text, form fields have labels, ARIA roles set
-- Color contrast: text meets WCAG AA (4.5:1 normal, 3:1 large text)
-- Focus management: focus visible on all elements, trapped in modals
-- Error announcements: form errors announced to screen readers
-- Responsive text: content readable at 200% zoom without horizontal scroll
-- Motion: animations respect prefers-reduced-motion setting`,
+    positive: `POSITIVE/HAPPY PATH (${testsPerCategory} tests): Main flows, valid data combos, all acceptance criteria verified`,
+    negative: `NEGATIVE (${testsPerCategory} tests): Invalid inputs, missing fields, unauthorized access, error states, rate limits`,
+    edge_case: `EDGE CASE (${testsPerCategory} tests): Boundary values (BVA), empty states, special chars, concurrency, back/forward nav, max-length inputs`,
+    security: `SECURITY (${testsPerCategory} tests): XSS injection, SQL injection, CSRF tokens, auth bypass, authz escalation, session fixation, sensitive data exposure`,
+    performance: `PERFORMANCE (${testsPerCategory} tests): Load time targets, large datasets, concurrent users, memory, API p50/p95/p99`,
+    accessibility: `ACCESSIBILITY (${testsPerCategory} tests): Keyboard nav, screen reader, WCAG AA contrast, focus management, zoom 200%, reduced motion`,
   };
 
-  const selectedInstructions = selectedCategories
-    .map(cat => categoryInstructions[cat])
-    .join('\n\n');
+  const selectedInstructions = selectedCategories.map(cat => categoryInstructions[cat]).join('\n');
 
-  const systemPrompt = `You are a senior QA engineer. Generate test cases from user stories.
+  const bddInstruction = options.framework ? `
+ALSO generate BDD/Gherkin output in the "gherkinOutput" field:
+- Use DECLARATIVE style (describe WHAT users accomplish, not HOW they click)
+- One Scenario per behavior — name it with the business outcome
+- Use domain language from the user story
+- For data-driven tests, use Scenario Outline with Examples table
+- Follow Cucumber best practices: each scenario independent, no And chains > 3 steps
+- Framework: ${options.framework}
 
-IMPORTANT RULES:
-1. ONLY generate test cases for these categories: ${selectedCategories.join(', ')}
-2. Do NOT generate tests for categories not listed above
-3. Generate EXACTLY ${totalTarget} test cases total (${testsPerCategory} per selected category)
-4. Every step must be SPECIFIC — never say "verify it works" — say exactly WHAT to verify and HOW
-5. Test data must be CONCRETE — never say "enter valid data" — write actual values like "john@example.com"
-6. Each test must be independent and have clear preconditions
+Additionally, generate runnable code snippets in the "codeSnippet" field using ${options.framework}. Use ONLY real, documented API methods.` : 'Do NOT generate code snippets or gherkin. Set codeSnippet to "" and gherkinOutput to "".';
 
-GENERATE TESTS FOR THESE CATEGORIES ONLY:
+  const systemPrompt = `You are a principal QA architect creating enterprise test cases following IEEE 829 Test Case Specification and TestRail/Zephyr Scale field structures. Your output should be production-ready for import into a test management tool.
 
+ABSOLUTE RULES:
+1. ONLY generate for these categories: ${selectedCategories.join(', ')}
+2. Generate EXACTLY ${totalTarget} test cases (${testsPerCategory} per category)
+3. NEVER use vague language. "Enter valid data" → "Enter 'john.doe@company.com' in the Email field"
+4. NEVER use generic preconditions. "User is logged in" → "User 'qa.tester@company.com' is authenticated with role 'Standard User', viewing the Dashboard page (/dashboard)"
+5. Each test case must be independently executable — no dependency on other test cases
+6. Label the test design technique used for each test case
+
+TEST CASE ID FORMAT: TC-[MODULE]-[001] where MODULE is inferred from the story (e.g., TC-AUTH-001, TC-CART-003)
+
+TRACEABILITY: Each test case MUST reference which acceptance criterion it covers (e.g., "Covers AC-3: Reset link expires after 24 hours"). Parse the acceptance criteria from the user story and map them.
+
+STEPS FORMAT — each step is an OBJECT with three fields (not a string):
+- "action": what to do (specific UI element, exact click/type action)
+- "testData": exact values to enter (or "N/A" if no data entry)
+- "expected": what should happen AFTER this specific step (per-step verification)
+
+CATEGORIES TO GENERATE:
 ${selectedInstructions}
 
-${options.framework ? `Generate runnable code snippets using ${options.framework}. Use ONLY real, documented API methods.` : 'Do NOT generate code snippets.'}
+TEST DESIGN TECHNIQUE — label each test case with the technique that drives it:
+BVA (Boundary Value Analysis), EP (Equivalence Partitioning), DT (Decision Table), ST (State Transition), EG (Error Guessing), Pairwise, Exploratory
+
+${bddInstruction}
 
 Return ONLY valid JSON:
 {
   "testSuite": {
-    "title": "Test suite title",
-    "description": "What this covers",
+    "title": "Test suite title matching the module under test",
+    "description": "What this suite covers and which requirements it traces to",
     "totalCases": ${totalTarget},
-    "coverageScore": 85
+    "coverageScore": 0
   },
   "testCases": [
     {
-      "id": "TC-001",
+      "id": "TC-MODULE-001",
       "category": "${selectedCategories[0]}",
-      "title": "Specific test title",
-      "description": "What this verifies",
-      "preconditions": ["Precondition 1"],
-      "steps": ["Step 1 with specific action", "Step 2 with specific verification"],
-      "testData": "Exact test data values to use",
-      "expectedResult": "Specific measurable expected outcome",
+      "traceability": "Covers AC-1: [acceptance criterion text]",
+      "title": "Specific, action-oriented test title",
+      "description": "What behavior this verifies and why it matters",
+      "preconditions": ["Specific state: user 'X' with role 'Y', on page 'Z', with data condition 'W'"],
+      "steps": [
+        { "action": "Click the 'Forgot Password' link below the Password field on /login", "testData": "N/A", "expected": "Browser navigates to /forgot-password. Page displays email input field with label 'Enter your email address'" },
+        { "action": "Type email address in the 'Email' input field", "testData": "john.doe@company.com", "expected": "Email field shows typed value. 'Send Reset Link' button remains enabled" }
+      ],
+      "testDataTable": [
+        { "field": "Email", "validValue": "john.doe@company.com", "invalidValue": "not-an-email", "boundary": "a@b.co (min valid)" }
+      ],
+      "expectedResult": "Overall expected outcome after all steps complete",
       "priority": "P0|P1|P2|P3",
-      "automatable": true,
-      "codeSnippet": ""
+      "priorityJustification": "Why this priority — tied to risk: 'P0 because auth bypass would expose all user data'",
+      "riskIfNotTested": "Specific bug that could reach production: 'Users could reset passwords for accounts they don't own'",
+      "automationFeasibility": { "automatable": true, "framework": "${options.framework || 'any'}", "estimatedEffort": "30 min", "notes": "Straightforward form interaction, no complex setup" },
+      "testDesignTechnique": "BVA|EP|DT|ST|EG|Pairwise|Exploratory",
+      "codeSnippet": "",
+      "gherkinOutput": ""
     }
   ],
   "coverageAnalysis": {
+    "requirementsCoverage": [
+      { "criterion": "AC-1: User clicks Forgot Password", "testCaseIds": ["TC-AUTH-001", "TC-AUTH-002"], "status": "Covered" }
+    ],
+    "techniqueCoverage": [
+      { "technique": "BVA", "applied": true, "testCaseIds": ["TC-AUTH-005"] },
+      { "technique": "EP", "applied": true, "testCaseIds": ["TC-AUTH-001", "TC-AUTH-003"] }
+    ],
+    "gaps": [
+      { "area": "Specific untested scenario", "riskRating": "High|Medium|Low", "recommendation": "What test to add" }
+    ],
     "coveredAreas": ["Area 1"],
     "missingCoverage": ["Gap 1"],
     "recommendations": ["Recommendation 1"]
+  },
+  "executionTemplate": {
+    "headers": ["Test Case ID", "Status", "Executed By", "Date", "Defect ID", "Notes"],
+    "rows": [["TC-MODULE-001", "Not Run", "", "", "", ""]]
   }
 }`;
 
@@ -1108,11 +1111,119 @@ function getMockResponse(systemPrompt: string, _userMessage: string): string {
   if (systemPrompt.includes('reproduction checklist')) {
     return JSON.stringify({ checklist: ['Clear browser cache', 'Use incognito window', 'Verify correct environment', 'Check network', 'Document timestamps'], scenarios: [{ name: 'Standard reproduction', steps: ['Follow reported steps exactly', 'Note deviations', 'Capture screenshots'], expectedOutcome: 'Bug should be reproducible' }] });
   }
-  if (systemPrompt.includes('comprehensive test cases from user stories')) {
-    return JSON.stringify({ testSuite: { title: 'User Login Test Suite', description: 'Tests for user authentication flow', totalCases: 8, coverageScore: 82 }, testCases: [
-      { id: 'TC-001', category: 'positive', title: 'Successful login with valid credentials', description: 'Verify user can log in', preconditions: ['User account exists'], steps: ['Navigate to login', 'Enter valid email', 'Enter valid password', 'Click Login'], testData: 'user@test.com / ValidPass123!', expectedResult: 'User redirected to dashboard', priority: 'P0', automatable: true, codeSnippet: '' },
-      { id: 'TC-002', category: 'negative', title: 'Login with invalid password', description: 'Verify error on wrong password', preconditions: ['User account exists'], steps: ['Navigate to login', 'Enter valid email', 'Enter wrong password', 'Click Login'], testData: 'user@test.com / WrongPass', expectedResult: 'Error message displayed', priority: 'P1', automatable: true, codeSnippet: '' },
-    ], coverageAnalysis: { coveredAreas: ['Happy path', 'Invalid credentials'], missingCoverage: ['SSO login', 'Rate limiting'], recommendations: ['Add MFA test cases'] } });
+  if (systemPrompt.includes('principal QA architect') || systemPrompt.includes('comprehensive test cases from user stories')) {
+    return JSON.stringify({
+      testSuite: { title: 'Password Reset Test Suite', description: 'IEEE 829 compliant test cases for password reset flow. Traces to acceptance criteria AC-1 through AC-5.', totalCases: 4, coverageScore: 82 },
+      testCases: [
+        {
+          id: 'TC-AUTH-001', category: 'positive', traceability: 'Covers AC-1: User clicks Forgot Password on login page',
+          title: 'Successful password reset request with valid registered email',
+          description: 'Verifies the complete happy path: user requests reset, receives email, clicks link, sets new password, and can log in with it.',
+          preconditions: ["User 'john.doe@company.com' exists with role 'Standard User', has verified email, is NOT currently authenticated, is on the /login page"],
+          steps: [
+            { action: "Click the 'Forgot Password?' link located below the Password input field", testData: 'N/A', expected: "Browser navigates to /forgot-password. Page displays 'Reset your password' heading and an Email input field" },
+            { action: "Type email address in the 'Email' input field", testData: 'john.doe@company.com', expected: "Email field displays typed value. 'Send Reset Link' button is enabled" },
+            { action: "Click the 'Send Reset Link' button", testData: 'N/A', expected: "Success toast: 'Reset link sent to john.doe@company.com'. Button shows loading state for 1-2s. Email arrives within 30 seconds" },
+            { action: 'Open reset email and click the reset link', testData: 'N/A', expected: "Browser opens /reset-password?token=<valid_token>. Page shows 'New Password' and 'Confirm Password' fields" },
+            { action: "Enter new password in both fields and click 'Reset Password'", testData: 'NewSecure!Pass99', expected: "Success page: 'Password updated'. Redirect to /login within 3 seconds" },
+          ],
+          testDataTable: [
+            { field: 'Email', validValue: 'john.doe@company.com', invalidValue: 'not-an-email', boundary: 'a@b.co (min valid)' },
+            { field: 'New Password', validValue: 'NewSecure!Pass99', invalidValue: 'short', boundary: '8 chars exact: Abcde1!x' },
+          ],
+          expectedResult: 'User can log in with new password "NewSecure!Pass99". Old password "OldPass123!" no longer works.',
+          priority: 'P0', priorityJustification: 'P0 because password reset is a critical account recovery path. Failure locks users out permanently if they forget their password.',
+          riskIfNotTested: 'Users could be permanently locked out of their accounts, leading to support ticket surge and churn.',
+          automationFeasibility: { automatable: true, framework: 'playwright', estimatedEffort: '45 min', notes: 'Requires email interception (Mailosaur/MailSlurp) for reset link extraction' },
+          testDesignTechnique: 'EP', codeSnippet: '', gherkinOutput: '',
+        },
+        {
+          id: 'TC-AUTH-002', category: 'negative', traceability: 'Covers AC-1: System validates email exists before sending reset',
+          title: 'Password reset request with unregistered email shows generic message',
+          description: 'Verifies the system does not reveal whether an email is registered (prevents account enumeration attack).',
+          preconditions: ["No account exists for 'nonexistent@company.com'. User is on the /forgot-password page"],
+          steps: [
+            { action: "Type unregistered email in the 'Email' input field", testData: 'nonexistent@company.com', expected: "Email field accepts input. No inline validation error." },
+            { action: "Click the 'Send Reset Link' button", testData: 'N/A', expected: "Same success message as valid email: 'Reset link sent to nonexistent@company.com'. NO error message revealing the email is not registered." },
+          ],
+          testDataTable: [
+            { field: 'Email', validValue: 'nonexistent@company.com', invalidValue: 'N/A', boundary: 'N/A' },
+          ],
+          expectedResult: 'No email is actually sent. Response is identical to a valid email request (timing, message, status code). No account enumeration possible.',
+          priority: 'P1', priorityJustification: 'P1 because account enumeration is an OWASP Top 10 risk. Attackers could harvest valid email addresses.',
+          riskIfNotTested: 'Attackers enumerate valid accounts by observing different responses for registered vs unregistered emails, enabling targeted phishing.',
+          automationFeasibility: { automatable: true, framework: 'playwright', estimatedEffort: '20 min', notes: 'Compare response body and timing between valid/invalid emails' },
+          testDesignTechnique: 'EG', codeSnippet: '', gherkinOutput: '',
+        },
+        {
+          id: 'TC-AUTH-003', category: 'edge_case', traceability: 'Covers AC-3: Reset link expires after 24 hours',
+          title: 'Password reset with expired token (24h boundary) shows expiration error',
+          description: 'Verifies the exact 24-hour expiration boundary for reset tokens using BVA.',
+          preconditions: ["Reset token generated for 'john.doe@company.com' exactly 24 hours and 1 minute ago. User has the reset link in their email."],
+          steps: [
+            { action: 'Click the reset link from the email sent 24h+ ago', testData: 'Token: rst_expired_24h_token', expected: "Page loads /reset-password?token=rst_expired_24h_token. Error message: 'This reset link has expired. Please request a new one.'" },
+            { action: "Click the 'Request new link' button on the expiration page", testData: 'N/A', expected: "Redirects to /forgot-password with email pre-filled" },
+          ],
+          testDataTable: [
+            { field: 'Token Age', validValue: '23h 59m (just under limit)', invalidValue: '24h 1m (just over limit)', boundary: '24h 0m 0s (exact boundary)' },
+          ],
+          expectedResult: 'Expired token is rejected. User is guided to request a new reset link. No password change is possible with an expired token.',
+          priority: 'P1', priorityJustification: 'P1 because expired tokens that still work create a security window — old emails in compromised inboxes could be used to hijack accounts.',
+          riskIfNotTested: 'Reset tokens remain valid indefinitely, allowing attackers to use old reset emails from compromised mail accounts days or weeks later.',
+          automationFeasibility: { automatable: true, framework: 'playwright', estimatedEffort: '30 min', notes: 'Requires ability to mock system time or pre-generate expired tokens in test DB' },
+          testDesignTechnique: 'BVA', codeSnippet: '', gherkinOutput: '',
+        },
+        {
+          id: 'TC-AUTH-004', category: 'negative', traceability: 'Covers AC-4: Password must meet complexity requirements',
+          title: 'Password reset with weak password is rejected with specific feedback',
+          description: 'Verifies all password complexity rules are enforced and specific error messages guide the user.',
+          preconditions: ["User 'john.doe@company.com' has a valid (non-expired) reset token. User is on /reset-password page."],
+          steps: [
+            { action: "Type weak password in 'New Password' field", testData: 'abc', expected: "Inline validation shows: 'Password must be at least 8 characters' (real-time, as user types)" },
+            { action: "Type password without special character", testData: 'Abcdefgh1', expected: "Inline validation shows: 'Password must contain at least one special character (!@#$%^&*)'" },
+            { action: "Type password meeting all requirements", testData: 'SecureP@ss99', expected: "All validation checks show green. 'Reset Password' button becomes enabled." },
+          ],
+          testDataTable: [
+            { field: 'Password', validValue: 'SecureP@ss99', invalidValue: 'abc', boundary: 'Abcde1!x (exactly 8 chars, minimum valid)' },
+          ],
+          expectedResult: 'Weak passwords are rejected with specific, actionable error messages. Only passwords meeting all complexity rules are accepted.',
+          priority: 'P1', priorityJustification: 'P1 because weak passwords are the #1 attack vector for account compromise. Enforcement is a security baseline.',
+          riskIfNotTested: 'Users set passwords like "123456" or "password", making accounts trivially compromisable via credential stuffing.',
+          automationFeasibility: { automatable: true, framework: 'playwright', estimatedEffort: '25 min', notes: 'Test each validation rule independently. Data-driven with multiple password variants.' },
+          testDesignTechnique: 'EP', codeSnippet: '', gherkinOutput: '',
+        },
+      ],
+      coverageAnalysis: {
+        requirementsCoverage: [
+          { criterion: "AC-1: User clicks 'Forgot Password' on login page", testCaseIds: ['TC-AUTH-001', 'TC-AUTH-002'], status: 'Covered' },
+          { criterion: 'AC-2: System sends reset email within 30 seconds', testCaseIds: ['TC-AUTH-001'], status: 'Covered' },
+          { criterion: 'AC-3: Reset link expires after 24 hours', testCaseIds: ['TC-AUTH-003'], status: 'Covered' },
+          { criterion: 'AC-4: Password must meet complexity requirements', testCaseIds: ['TC-AUTH-004'], status: 'Covered' },
+          { criterion: 'AC-5: User receives confirmation after successful reset', testCaseIds: ['TC-AUTH-001'], status: 'Covered' },
+        ],
+        techniqueCoverage: [
+          { technique: 'Equivalence Partitioning', applied: true, testCaseIds: ['TC-AUTH-001', 'TC-AUTH-004'] },
+          { technique: 'Boundary Value Analysis', applied: true, testCaseIds: ['TC-AUTH-003'] },
+          { technique: 'Error Guessing', applied: true, testCaseIds: ['TC-AUTH-002'] },
+        ],
+        gaps: [
+          { area: 'Rate limiting on reset requests (e.g., max 5 per hour)', riskRating: 'Medium', recommendation: 'Add test TC-AUTH-005 to verify rate limit after 5 consecutive requests' },
+          { area: 'Concurrent reset requests from multiple devices', riskRating: 'Low', recommendation: 'Add concurrency test to verify only latest token is valid' },
+        ],
+        coveredAreas: ['Happy path', 'Invalid email handling', 'Token expiration', 'Password complexity'],
+        missingCoverage: ['Rate limiting', 'Concurrent device handling', 'Email deliverability monitoring'],
+        recommendations: ['Add rate limiting tests', 'Add token invalidation on password change', 'Add accessibility tests for reset form'],
+      },
+      executionTemplate: {
+        headers: ['Test Case ID', 'Status', 'Executed By', 'Date', 'Defect ID', 'Notes'],
+        rows: [
+          ['TC-AUTH-001', 'Not Run', '', '', '', ''],
+          ['TC-AUTH-002', 'Not Run', '', '', '', ''],
+          ['TC-AUTH-003', 'Not Run', '', '', '', ''],
+          ['TC-AUTH-004', 'Not Run', '', '', '', ''],
+        ],
+      },
+    });
   }
   if (systemPrompt.includes('API test automation')) {
     return JSON.stringify({ endpoint: { method: 'POST', path: '/api/login', description: 'User authentication endpoint' }, testScripts: [

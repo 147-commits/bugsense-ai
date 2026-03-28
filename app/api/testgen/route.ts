@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
 
     if (projectId) {
       await prisma.generatedContent.create({
-        data: { projectId, type: 'testgen', input: userStory, output: result, framework: options.framework || null },
+        data: { projectId, type: 'testgen', input: userStory, output: result as unknown as Parameters<typeof prisma.generatedContent.create>[0]['data']['output'], framework: options.framework || null },
       });
     }
 
