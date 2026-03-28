@@ -15,7 +15,7 @@ interface BugAnalysisCardProps {
   qualityScore?: { score: number; breakdown: Record<string, number>; suggestions: string[] };
   testCases?: TestCase[];
   reproChecklist?: { checklist: string[]; scenarios: { name: string; steps: string[]; expectedOutcome: string }[] };
-  duplicates?: { id: string; similarity: number; reason: string }[];
+  duplicates?: Record<string, unknown>;
 }
 
 // Safely read extended fields from the bug (they may or may not exist on older data)
@@ -582,23 +582,7 @@ export default function BugAnalysisCard({ bug, qualityScore, testCases, reproChe
       )}
 
       {/* ── Duplicate Detection ──────────────────────────────────────── */}
-      {duplicates && duplicates.length > 0 && (
-        <div className="glass-panel p-6">
-          <div className="flex items-center gap-2 mb-3">
-            <GitCompare className="w-4 h-4 text-accent-amber" />
-            <span className="text-sm font-semibold text-accent-amber">Potential Duplicates Detected</span>
-          </div>
-          {duplicates.map((d, i) => (
-            <div key={i} className="p-3 rounded-xl bg-accent-amber/5 border border-accent-amber/10 mb-2">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-mono text-text-muted">{d.id}</span>
-                <span className="text-xs font-bold text-accent-amber">{Math.round(d.similarity * 100)}% match</span>
-              </div>
-              <p className="text-xs text-text-secondary">{d.reason}</p>
-            </div>
-          ))}
-        </div>
-      )}
+      <DuplicateSection duplicates={duplicates} />
 
       {/* ── Export Buttons ────────────────────────────────────────────── */}
       <div className="flex gap-3">
@@ -614,5 +598,153 @@ export default function BugAnalysisCard({ bug, qualityScore, testCases, reproChe
         </button>
       </div>
     </div>
+  );
+}
+
+// ── Duplicate Detection Section ──────────────────────────────────────────────
+
+function DuplicateSection({ duplicates }: { duplicates?: Record<string, unknown> }) {
+  if (!duplicates) return null;
+
+  // Handle both old format (array) and new format (object with duplicates/clusters)
+  const dupList = Array.isArray(duplicates)
+    ? duplicates as Array<Record<string, unknown>>
+    : Array.isArray(duplicates.duplicates)
+      ? duplicates.duplicates as Array<Record<string, unknown>>
+      : [];
+  const clusters = Array.isArray(duplicates.clusters) ? duplicates.clusters as Array<Record<string, unknown>> : [];
+  const summary = duplicates.summary as Record<string, number> | undefined;
+
+  if (dupList.length === 0 && clusters.length === 0) return null;
+
+  const recColors: Record<string, string> = {
+    'Link as Duplicate': 'bg-accent-coral/15 text-accent-coral',
+    'Related but Distinct': 'bg-accent-amber/15 text-accent-amber',
+    'Investigate Further': 'bg-accent-blue/15 text-accent-blue',
+  };
+
+  const confColors: Record<string, string> = {
+    High: 'text-accent-coral',
+    Medium: 'text-accent-amber',
+    Low: 'text-accent-emerald',
+  };
+
+  return (
+    <>
+      {dupList.length > 0 && (
+        <div className="glass-panel p-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <GitCompare className="w-4 h-4 text-accent-amber" />
+              <span className="text-sm font-semibold text-accent-amber">Potential Duplicates ({dupList.length})</span>
+            </div>
+            {summary && (
+              <div className="flex items-center gap-2 text-[10px] text-text-muted">
+                {summary.highConfidence > 0 && <span className="text-accent-coral">{summary.highConfidence} high</span>}
+                {summary.mediumConfidence > 0 && <span className="text-accent-amber">{summary.mediumConfidence} medium</span>}
+                {summary.lowConfidence > 0 && <span className="text-accent-emerald">{summary.lowConfidence} low</span>}
+              </div>
+            )}
+          </div>
+
+          {dupList.map((d, i) => {
+            const breakdown = d.similarityBreakdown as Record<string, number> | undefined;
+            const evidence = d.matchingEvidence as string[] | undefined;
+            const sim = typeof d.similarity === 'number' ? d.similarity : 0;
+            const simPct = sim > 1 ? sim : Math.round(sim * 100);
+
+            return (
+              <div key={i} className="p-4 rounded-xl bg-bg-tertiary border border-border mb-3 last:mb-0">
+                {/* Header */}
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div>
+                    <span className="text-xs font-mono text-text-muted">{d.id as string}</span>
+                    {d.title ? <p className="text-sm text-text-primary font-medium mt-0.5">{d.title as string}</p> : null}
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className={cn('text-xs font-bold', simPct >= 85 ? 'text-accent-coral' : simPct >= 60 ? 'text-accent-amber' : 'text-accent-emerald')}>
+                      {simPct}%
+                    </span>
+                    {d.confidence ? (
+                      <span className={cn('text-[10px] font-medium', confColors[d.confidence as string] || 'text-text-muted')}>
+                        {d.confidence as string}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Similarity Breakdown */}
+                {breakdown && (
+                  <div className="grid grid-cols-4 gap-2 mb-2">
+                    {Object.entries(breakdown).map(([key, val]) => (
+                      <div key={key} className="text-center">
+                        <div className="h-1 bg-bg-hover rounded-full overflow-hidden mb-0.5">
+                          <div className={cn('h-full rounded-full', val >= 80 ? 'bg-accent-coral' : val >= 50 ? 'bg-accent-amber' : 'bg-accent-emerald')} style={{ width: `${val}%` }} />
+                        </div>
+                        <span className="text-[10px] text-text-muted capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Matching Evidence */}
+                {evidence && evidence.length > 0 ? (
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {evidence.map((e, j) => (
+                      <span key={j} className="text-[10px] px-1.5 py-0.5 rounded bg-bg-hover text-text-muted border border-border">{e}</span>
+                    ))}
+                  </div>
+                ) : null}
+
+                {/* Recommendation */}
+                <div className="flex items-center gap-2">
+                  {d.recommendation ? (
+                    <span className={cn('text-[10px] px-2 py-0.5 rounded-md font-medium', recColors[d.recommendation as string] || 'bg-bg-tertiary text-text-muted')}>
+                      {d.recommendation as string}
+                    </span>
+                  ) : null}
+                  {d.masterBug && d.recommendation === 'Link as Duplicate' ? (
+                    <span className="text-[10px] text-text-muted">Master: <span className="font-mono">{d.masterBug as string}</span></span>
+                  ) : null}
+                </div>
+
+                {/* Difference explanation */}
+                {d.difference && d.difference !== 'null' ? (
+                  <p className="text-[10px] text-text-muted mt-1">{d.difference as string}</p>
+                ) : null}
+
+                {/* Fallback: old-format reason */}
+                {!d.recommendation && d.reason ? (
+                  <p className="text-xs text-text-secondary mt-1">{d.reason as string}</p>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Bug Clusters */}
+      {clusters.length > 0 && (
+        <div className="glass-panel p-6">
+          <div className="flex items-center gap-2 mb-3">
+            <GitCompare className="w-4 h-4 text-accent-violet" />
+            <span className="text-sm font-semibold text-accent-violet">Related Bug Clusters</span>
+          </div>
+          {clusters.map((c, i) => (
+            <div key={i} className="p-3 rounded-xl bg-accent-violet/5 border border-accent-violet/10 mb-2 last:mb-0">
+              <p className="text-sm text-text-primary font-medium">{c.name as string}</p>
+              <p className="text-xs text-text-secondary mt-0.5">{c.description as string}</p>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-[10px] text-text-muted">Bugs:</span>
+                {(c.bugIds as string[])?.map((id) => (
+                  <span key={id} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg-tertiary text-text-muted border border-border">{id}</span>
+                ))}
+              </div>
+              {c.recommendation ? <p className="text-[10px] text-accent-violet mt-1">{c.recommendation as string}</p> : null}
+            </div>
+          ))}
+        </div>
+      )}
+    </>
   );
 }

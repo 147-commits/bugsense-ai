@@ -26,9 +26,9 @@ export async function POST(req: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
-    const duplicates = await detectDuplicates({ title, description }, existingBugs);
+    const result = await detectDuplicates({ title, description }, existingBugs);
 
-    return NextResponse.json({ duplicates });
+    return NextResponse.json(result);
   } catch (error) {
     console.error('Duplicate detection error:', error);
     return NextResponse.json({ error: 'Failed to detect duplicates' }, { status: 500 });

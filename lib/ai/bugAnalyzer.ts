@@ -318,20 +318,79 @@ Return ONLY valid JSON:
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 3. DUPLICATE DETECTION (existing)
+// 3. DUPLICATE DETECTION — Enterprise Duplicate Analysis
 // ═══════════════════════════════════════════════════════════════
 export async function detectDuplicates(newBug: { title: string; description: string }, existingBugs: { id: string; title: string; description: string }[]) {
-  if (existingBugs.length === 0) return [];
+  if (existingBugs.length === 0) return { duplicates: [], clusters: [], summary: { totalCandidates: 0, highConfidence: 0, mediumConfidence: 0, lowConfidence: 0 } };
 
-  const systemPrompt = `You are a duplicate bug detector. Compare the new bug against existing bugs.
+  const systemPrompt = `You are a principal QA engineer performing enterprise-grade duplicate bug analysis. Analyze the new bug against existing bugs with multi-dimensional similarity scoring.
+
+For EACH potential match (similarity > 40%), provide:
+
+1. SIMILARITY BREAKDOWN (not just one number):
+   - titleSimilarity (0-100): Do the titles describe the same symptom?
+   - descriptionSimilarity (0-100): Do the descriptions match in technical detail?
+   - componentMatch (0-100): Are they in the same module/feature area?
+   - symptomMatch (0-100): Do they describe the same observable behavior?
+   - overallSimilarity: weighted average (title 30%, description 35%, component 15%, symptom 20%)
+
+2. MATCHING EVIDENCE: List the specific keywords, error messages, modules, or symptoms that matched
+
+3. RECOMMENDATION — one of:
+   - "Link as Duplicate": >85% confidence this is the same bug. Specify which should be MASTER (the one with more detail)
+   - "Related but Distinct": Same area but different root cause or symptom. Explain the difference.
+   - "Investigate Further": Needs manual review. Explain what to check.
+
+4. CONFIDENCE LEVEL: High (>85%), Medium (60-85%), Low (40-60%)
+
+Also identify BUG CLUSTERS — groups of related bugs that might indicate a systemic issue (e.g., "3 bugs all in the Authentication module suggest a structural weakness").
+
 Return ONLY valid JSON:
-{ "duplicates": [{ "id": "existing_bug_id", "similarity": 0.92, "reason": "Why duplicates" }] }
-Only include bugs with similarity > 0.6. Return empty array if no duplicates.`;
+{
+  "duplicates": [
+    {
+      "id": "existing_bug_id",
+      "title": "Title of the existing bug",
+      "similarity": 0.92,
+      "similarityBreakdown": {
+        "titleSimilarity": 95,
+        "descriptionSimilarity": 88,
+        "componentMatch": 100,
+        "symptomMatch": 85
+      },
+      "matchingEvidence": ["Both mention 'OAuth callback'", "Same error: TypeError on login", "Same module: Authentication"],
+      "recommendation": "Link as Duplicate|Related but Distinct|Investigate Further",
+      "masterBug": "Which bug ID should be the master (more detail/activity), or null",
+      "difference": "null if duplicate, or explanation of how they differ",
+      "confidence": "High|Medium|Low",
+      "reason": "Concise explanation of why this is a match"
+    }
+  ],
+  "clusters": [
+    {
+      "name": "Cluster name (e.g., 'Authentication Issues')",
+      "bugIds": ["bug-1", "bug-2"],
+      "description": "Why these bugs are related — potential systemic issue",
+      "recommendation": "What to investigate or fix at the system level"
+    }
+  ],
+  "summary": {
+    "totalCandidates": 0,
+    "highConfidence": 0,
+    "mediumConfidence": 0,
+    "lowConfidence": 0
+  }
+}
+
+RULES:
+- Only include matches with overallSimilarity > 40%
+- Be conservative — prefer "Related but Distinct" over "Link as Duplicate" when uncertain
+- For "Link as Duplicate", the master should be the bug with more information, more activity, or was reported first
+- Return empty arrays if no matches found`;
 
   const userMessage = `New Bug:\nTitle: ${newBug.title}\nDescription: ${newBug.description}\n\nExisting Bugs:\n${existingBugs.map((b) => `ID: ${b.id} | Title: ${b.title} | Desc: ${b.description}`).join('\n')}`;
   const response = await callAI(systemPrompt, userMessage);
-  const result = extractJSON(response);
-  return (result.duplicates as Array<{ id: string; similarity: number; reason: string }>) || [];
+  return extractJSON(response);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1514,8 +1573,12 @@ function getMockResponse(systemPrompt: string, _userMessage: string): string {
   if (systemPrompt.includes('quality evaluator')) {
     return JSON.stringify({ score: 78, breakdown: { clarity: 82, reproducibility: 75, completeness: 80, technicalDetail: 70, actionability: 83 }, suggestions: ['Add browser version', 'Include network conditions', 'Add timestamps'] });
   }
-  if (systemPrompt.includes('duplicate bug detector')) {
-    return JSON.stringify({ duplicates: [] });
+  if (systemPrompt.includes('principal QA engineer performing enterprise-grade duplicate') || systemPrompt.includes('duplicate bug detector')) {
+    return JSON.stringify({
+      duplicates: [],
+      clusters: [],
+      summary: { totalCandidates: 0, highConfidence: 0, mediumConfidence: 0, lowConfidence: 0 },
+    });
   }
   if (systemPrompt.includes('test engineer') || systemPrompt.includes('regression test cases')) {
     return JSON.stringify({ testCases: [

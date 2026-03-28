@@ -14,7 +14,7 @@ interface AnalysisResult {
   qualityScore: { score: number; breakdown: Record<string, number>; suggestions: string[] };
   testCases: TestCase[];
   reproductionChecklist: { checklist: string[]; scenarios: { name: string; steps: string[]; expectedOutcome: string }[] };
-  duplicates: { id: string; similarity: number; reason: string }[];
+  duplicates: Record<string, unknown>;
 }
 
 export default function AnalyzePage() {
