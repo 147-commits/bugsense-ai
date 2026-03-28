@@ -722,50 +722,113 @@ Return ONLY valid JSON:
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 10. SPRINT TEST PLAN GENERATOR (NEW!)
+// 10. SPRINT TEST PLAN GENERATOR — ISO/IEC/IEEE 29119-3 Agile
 // ═══════════════════════════════════════════════════════════════
 export async function generateTestPlan(sprintInfo: string, options: { sprintDuration: number; teamSize: number; includeRegression: boolean; riskLevel: 'low' | 'medium' | 'high' }) {
-  const systemPrompt = `You are a QA lead who creates detailed sprint test plans.
+  const teamMembers = Array.from({ length: options.teamSize }, (_, i) => `QA${i + 1}`);
 
-Given sprint user stories/tickets, create a comprehensive test plan.
+  const systemPrompt = `You are a QA Director creating a sprint test plan following ISO/IEC/IEEE 29119-3 adapted for agile delivery. The plan must be immediately usable — paste-into-Confluence ready.
 
+Use [Company Name] and [Project Name] as placeholders.
 Sprint duration: ${options.sprintDuration} days
-QA team size: ${options.teamSize}
-Risk level: ${options.riskLevel}
+QA team: ${options.teamSize} engineers (${teamMembers.join(', ')})
+Overall risk level: ${options.riskLevel}
 Include regression: ${options.includeRegression}
+
+REQUIRED SECTIONS — generate ALL with realistic detail:
+
+1. HEADER: Sprint name, sprint dates, document version, author, approval status (Draft)
+
+2. SPRINT TEST OBJECTIVE: Tied directly to the sprint goal — what quality outcomes this sprint must achieve
+
+3. TEST SCOPE:
+   - In Scope: Each story/ticket with its acceptance criteria listed
+   - Out of Scope: Explicitly stated items with justification for exclusion
+
+4. RISK ASSESSMENT MATRIX: table with columns:
+   Risk ID | Description | Likelihood (1-5) | Impact (1-5) | Risk Score (L×I) | Mitigation | Owner
+   Prioritize testing effort: ~60% on high-risk stories, ~30% medium, ~10% low
+
+5. AGILE TESTING QUADRANTS:
+   - Q1 (Technology-facing, supporting): Unit tests, TDD — what dev owns
+   - Q2 (Business-facing, supporting): Functional tests, BDD/acceptance — what QA automates
+   - Q3 (Business-facing, critiquing): Exploratory testing, UAT — what QA does manually
+   - Q4 (Technology-facing, critiquing): Performance, security, load — what needs tooling
+   Map each story to its primary quadrant(s).
+
+6. TEST ESTIMATION: Per-story breakdown table:
+   Story ID | Test Design (hrs) | Test Execution (hrs) | Automation (hrs) | Regression (hrs) | Total (hrs) | Assignee
+
+7. RESOURCE ALLOCATION: Who does what based on team size. Table: Team Member | Primary Stories | Secondary/Backup | Regression Areas
+
+8. REGRESSION SCOPE: Which existing areas need retesting and WHY (impacted by this sprint's changes). Table: Area | Reason for Regression | Tests | Est. Time | Priority
+
+9. ENVIRONMENT & TEST DATA: Table: Environment | URL | Purpose | Data Requirements | Refresh Schedule
+
+10. ENTRY CRITERIA: Code complete and merged, unit tests passing (>80% coverage on new code), build successfully deployed to QA, test data loaded, no open blockers
+
+11. EXIT CRITERIA: All P0/P1 tests pass, no open Critical/High defects, regression pass rate ≥ 95%, code coverage ≥ 80% on new code, performance benchmarks met, sign-off obtained
+
+12. DAILY SCHEDULE: Day-by-day plan:
+    Day 1: Smoke test + test design + env verification
+    Day 2-N: Test execution by priority (P0 first, then P1, etc.)
+    Last 2 days: Regression + exploratory + sign-off preparation
+
+13. DEPENDENCIES & BLOCKERS: External dependencies, environment dependencies, data dependencies
+
+14. DEFINITION OF DONE (QA-specific): Checklist of what "done" means from QA perspective
+
+15. MARKDOWN OUTPUT: Professional Confluence-ready markdown with all sections, tables, and [Company Name]/[Project Name] placeholders
 
 Return ONLY valid JSON:
 {
   "testPlan": {
     "sprintName": "Sprint name",
-    "objective": "Testing objective",
-    "scope": "What's in and out of scope",
-    "riskAssessment": "Overall risk level and reasoning",
+    "sprintDates": "Start — End date range",
+    "version": "1.0",
+    "author": "QA Lead",
+    "approvalStatus": "Draft",
+    "objective": "Sprint test objective tied to sprint goal",
     "estimatedHours": 0,
-    "startDate": "Day 1 activities",
-    "testEnvironments": ["env1"]
+    "testEnvironments": ["QA", "Staging"]
   },
+  "scope": {
+    "inScope": [{ "storyId": "US-401", "title": "Story title", "acceptanceCriteria": ["AC-1: ...", "AC-2: ..."] }],
+    "outOfScope": [{ "item": "What is excluded", "reason": "Why" }]
+  },
+  "riskMatrix": [
+    { "riskId": "R-001", "description": "Risk description", "likelihood": 4, "impact": 5, "score": 20, "mitigation": "How to mitigate", "owner": "QA1" }
+  ],
+  "testingQuadrants": {
+    "q1": { "label": "Unit/TDD (Dev-owned)", "items": ["Unit tests for auth module"] },
+    "q2": { "label": "Functional/BDD (QA Automation)", "items": ["Automated acceptance tests for 2FA flow"] },
+    "q3": { "label": "Exploratory/UAT (QA Manual)", "items": ["Exploratory testing of new UI flows"] },
+    "q4": { "label": "Performance/Security (Tooling)", "items": ["Load test on login endpoint"] }
+  },
+  "estimation": [
+    { "storyId": "US-401", "title": "Story", "testDesignHrs": 2, "testExecutionHrs": 4, "automationHrs": 3, "regressionHrs": 1, "totalHrs": 10, "assignee": "QA1" }
+  ],
+  "resourceAllocation": [
+    { "member": "QA1", "primaryStories": ["US-401", "US-402"], "backup": ["US-403"], "regressionAreas": ["Authentication"] }
+  ],
   "stories": [
     {
-      "storyId": "Story reference",
-      "title": "Story title",
-      "testCases": [
-        { "title": "", "type": "functional|integration|e2e|performance", "priority": "P0|P1|P2|P3", "estimatedMinutes": 30, "assignee": "QA1|QA2" }
-      ],
-      "riskLevel": "low|medium|high",
+      "storyId": "US-401", "title": "Story title", "riskLevel": "high",
+      "testCases": [{ "title": "Test case", "type": "functional", "priority": "P0", "estimatedMinutes": 30, "assignee": "QA1" }],
       "testDataNeeded": "What test data is required"
     }
   ],
-  "regressionSuite": [{ "area": "", "tests": 0, "estimatedMinutes": 0, "priority": "P1|P2" }],
-  "schedule": [
-    { "day": 1, "activities": ["Activity 1"], "milestone": "" }
-  ],
+  "regressionSuite": [{ "area": "Area name", "reason": "Why regression needed", "tests": 10, "estimatedMinutes": 60, "priority": "P1" }],
+  "schedule": [{ "day": 1, "activities": ["Activity 1"], "milestone": "Milestone or empty string" }],
+  "environmentAndData": [{ "environment": "QA", "url": "https://qa.app.com", "purpose": "Functional testing", "dataRequirements": "Seeded test users", "refreshSchedule": "Daily at 6 AM" }],
   "entryExitCriteria": {
-    "entry": ["Criterion 1"],
-    "exit": ["Criterion 1"]
+    "entry": ["Code complete and merged to release branch", "Unit tests passing with >80% coverage on new code"],
+    "exit": ["All P0/P1 tests pass", "No open Critical/High defects", "Regression pass rate >= 95%"]
   },
-  "risks": [{ "risk": "", "mitigation": "", "probability": "low|medium|high" }],
-  "markdownOutput": "Complete test plan in markdown"
+  "dependencies": [{ "dependency": "Description", "type": "external|environment|data|team", "status": "resolved|pending|blocked", "owner": "Who" }],
+  "definitionOfDone": ["All acceptance criteria verified", "Regression suite passed", "No open P0/P1 defects"],
+  "risks": [{ "risk": "Risk description", "mitigation": "How to mitigate", "probability": "low|medium|high" }],
+  "markdownOutput": "Complete Confluence-ready markdown with all sections and tables"
 }`;
 
   const response = await callAI(systemPrompt, `Sprint Information:\n${sprintInfo}`);
@@ -1755,8 +1818,109 @@ setup.afterAll(async ({ request }) => {
       totalRecords: 19,
     });
   }
-  if (systemPrompt.includes('sprint test plan')) {
-    return JSON.stringify({ testPlan: { sprintName: 'Sprint 24', objective: 'Test new features and regression', scope: 'Authentication, Billing, Dashboard', riskAssessment: 'Medium risk', estimatedHours: 40, startDate: 'Day 1', testEnvironments: ['staging', 'QA'] }, stories: [], regressionSuite: [], schedule: [{ day: 1, activities: ['Setup test environment', 'Review stories'], milestone: 'Test prep complete' }], entryExitCriteria: { entry: ['Build deployed to staging'], exit: ['All P0/P1 tests pass'] }, risks: [], markdownOutput: '# Sprint 24 Test Plan\n...' });
+  if (systemPrompt.includes('QA Director creating a sprint test plan') || systemPrompt.includes('sprint test plan')) {
+    return JSON.stringify({
+      testPlan: {
+        sprintName: 'Sprint 24 — Auth Improvements',
+        sprintDates: 'Mar 18 – Mar 29, 2026',
+        version: '1.0',
+        author: 'QA Lead',
+        approvalStatus: 'Draft',
+        objective: 'Validate all authentication enhancements (2FA, social login, account lockout) are secure, accessible, and regression-free before release to production.',
+        estimatedHours: 52,
+        testEnvironments: ['QA', 'Staging'],
+      },
+      scope: {
+        inScope: [
+          { storyId: 'US-401', title: 'Implement 2FA via SMS and authenticator app', acceptanceCriteria: ['AC-1: User can enable 2FA from security settings', 'AC-2: SMS code delivered within 30s', 'AC-3: Authenticator app QR code scannable', 'AC-4: Backup codes generated (10 single-use codes)'] },
+          { storyId: 'US-402', title: 'Remember device option for 2FA', acceptanceCriteria: ['AC-1: "Remember this device" checkbox on 2FA screen', 'AC-2: Remembered devices skip 2FA for 30 days', 'AC-3: User can revoke remembered devices'] },
+          { storyId: 'US-404', title: 'Account lockout after 5 failures', acceptanceCriteria: ['AC-1: Account locked after 5 consecutive failures', 'AC-2: Lockout duration is 15 minutes', 'AC-3: Admin can unlock immediately'] },
+          { storyId: 'BUG-891', title: 'Fix session timeout redirect', acceptanceCriteria: ['AC-1: Expired session redirects to /login with message'] },
+        ],
+        outOfScope: [
+          { item: 'US-405 Social login (Google, GitHub)', reason: 'Moved to Sprint 25 — waiting on OAuth credentials from security team' },
+          { item: 'Performance load testing', reason: 'Scheduled for hardening sprint after feature complete' },
+        ],
+      },
+      riskMatrix: [
+        { riskId: 'R-001', description: '2FA SMS delivery depends on third-party Twilio API', likelihood: 3, impact: 5, score: 15, mitigation: 'Mock SMS in QA env, test real SMS in staging only', owner: 'QA1' },
+        { riskId: 'R-002', description: 'Account lockout could lock out legitimate users if threshold too aggressive', likelihood: 4, impact: 4, score: 16, mitigation: 'Test with exact boundary (4, 5, 6 attempts), verify unlock flow', owner: 'QA2' },
+        { riskId: 'R-003', description: 'Session timeout fix may affect existing session persistence', likelihood: 2, impact: 3, score: 6, mitigation: 'Include session persistence in regression suite', owner: 'QA1' },
+      ],
+      testingQuadrants: {
+        q1: { label: 'Unit/TDD (Dev-owned)', items: ['Unit tests for TOTP code generation', 'Unit tests for lockout counter logic', 'Unit tests for session timeout calculation'] },
+        q2: { label: 'Functional/BDD (QA Automation)', items: ['Automated 2FA setup flow', 'Automated login with 2FA verification', 'Automated lockout trigger and recovery', 'Automated session timeout redirect'] },
+        q3: { label: 'Exploratory/UAT (QA Manual)', items: ['Exploratory: 2FA setup on different mobile devices', 'Exploratory: UX of lockout messaging', 'UAT: end-to-end auth flow with stakeholders'] },
+        q4: { label: 'Performance/Security (Tooling)', items: ['Brute force resistance verification', 'TOTP timing attack resistance', 'Session token entropy validation'] },
+      },
+      estimation: [
+        { storyId: 'US-401', title: '2FA Implementation', testDesignHrs: 4, testExecutionHrs: 8, automationHrs: 6, regressionHrs: 2, totalHrs: 20, assignee: 'QA1' },
+        { storyId: 'US-402', title: 'Remember Device', testDesignHrs: 2, testExecutionHrs: 4, automationHrs: 3, regressionHrs: 1, totalHrs: 10, assignee: 'QA1' },
+        { storyId: 'US-404', title: 'Account Lockout', testDesignHrs: 2, testExecutionHrs: 5, automationHrs: 3, regressionHrs: 1, totalHrs: 11, assignee: 'QA2' },
+        { storyId: 'BUG-891', title: 'Session Timeout Fix', testDesignHrs: 1, testExecutionHrs: 2, automationHrs: 1, regressionHrs: 2, totalHrs: 6, assignee: 'QA2' },
+      ],
+      resourceAllocation: [
+        { member: 'QA1', primaryStories: ['US-401', 'US-402'], backup: ['BUG-891'], regressionAreas: ['Authentication', 'Session Management'] },
+        { member: 'QA2', primaryStories: ['US-404', 'BUG-891'], backup: ['US-401'], regressionAreas: ['Login Flow', 'Password Reset'] },
+      ],
+      stories: [
+        { storyId: 'US-401', title: '2FA via SMS and authenticator', riskLevel: 'high', testCases: [
+          { title: 'Enable 2FA with authenticator app', type: 'functional', priority: 'P0', estimatedMinutes: 30, assignee: 'QA1' },
+          { title: 'Login with valid TOTP code', type: 'e2e', priority: 'P0', estimatedMinutes: 20, assignee: 'QA1' },
+          { title: 'Login with invalid TOTP code', type: 'functional', priority: 'P1', estimatedMinutes: 15, assignee: 'QA1' },
+          { title: 'Backup code usage and single-use enforcement', type: 'functional', priority: 'P1', estimatedMinutes: 25, assignee: 'QA1' },
+        ], testDataNeeded: 'Test phone number for SMS, authenticator app on test device' },
+        { storyId: 'US-404', title: 'Account lockout after 5 failures', riskLevel: 'high', testCases: [
+          { title: 'Account locks on 5th failed attempt', type: 'functional', priority: 'P0', estimatedMinutes: 20, assignee: 'QA2' },
+          { title: 'Account unlocks after 15 min', type: 'functional', priority: 'P0', estimatedMinutes: 20, assignee: 'QA2' },
+          { title: 'Admin can unlock account immediately', type: 'functional', priority: 'P1', estimatedMinutes: 15, assignee: 'QA2' },
+        ], testDataNeeded: 'Test user account, admin account for unlock testing' },
+      ],
+      regressionSuite: [
+        { area: 'Login Flow', reason: 'All auth changes impact the login flow', tests: 12, estimatedMinutes: 45, priority: 'P1' },
+        { area: 'Password Reset', reason: 'Session changes may affect reset token handling', tests: 6, estimatedMinutes: 25, priority: 'P1' },
+        { area: 'Session Persistence', reason: 'BUG-891 fix directly modifies session behavior', tests: 8, estimatedMinutes: 30, priority: 'P1' },
+        { area: 'Dashboard Access', reason: 'Auth changes could affect post-login routing', tests: 5, estimatedMinutes: 15, priority: 'P2' },
+      ],
+      schedule: [
+        { day: 1, activities: ['Environment verification and smoke test', 'Test case design review', 'Test data preparation'], milestone: 'Test readiness confirmed' },
+        { day: 2, activities: ['P0 test execution: 2FA setup and login', 'P0 test execution: Account lockout trigger'], milestone: '' },
+        { day: 3, activities: ['P0 test execution: Session timeout fix', 'P1 test execution: Backup codes, invalid TOTP', 'Begin automation for 2FA flow'], milestone: '' },
+        { day: 4, activities: ['P1 test execution: Remember device, admin unlock', 'Automation: lockout scenarios'], milestone: 'All P0 tests complete' },
+        { day: 5, activities: ['Exploratory testing: 2FA on different devices', 'Edge case testing: rapid login attempts', 'Defect retesting'], milestone: '' },
+        { day: 6, activities: ['Regression suite execution: Login + Password Reset', 'Continue automation'], milestone: '' },
+        { day: 7, activities: ['Regression suite execution: Session + Dashboard', 'Final defect retesting', 'Test summary report preparation'], milestone: 'Regression complete' },
+        { day: 8, activities: ['Sign-off meeting preparation', 'Go/No-Go recommendation', 'Documentation update'], milestone: 'Sprint QA sign-off' },
+      ],
+      environmentAndData: [
+        { environment: 'QA', url: 'https://qa.app.com', purpose: 'Functional and integration testing', dataRequirements: 'Seeded test users with various roles, mock SMS provider', refreshSchedule: 'Daily at 6 AM UTC' },
+        { environment: 'Staging', url: 'https://staging.app.com', purpose: 'E2E and regression testing', dataRequirements: 'Production-like data subset, real SMS for final verification', refreshSchedule: 'Weekly Sunday night' },
+      ],
+      entryExitCriteria: {
+        entry: ['Code complete and merged to release branch', 'Unit tests passing with >80% coverage on new code', 'Build successfully deployed to QA environment', 'Test data seeded and verified', 'No open blocker defects from previous sprint'],
+        exit: ['All P0 tests passed', 'All P1 tests passed (or deferred with PM approval)', 'No open Critical or High severity defects', 'Regression pass rate ≥ 95%', 'Code coverage ≥ 80% on new code', 'Performance benchmarks met (login < 500ms)', 'QA sign-off obtained'],
+      },
+      dependencies: [
+        { dependency: 'Twilio SMS sandbox access for 2FA testing', type: 'external', status: 'resolved', owner: 'DevOps' },
+        { dependency: 'QA environment database refresh with auth schema changes', type: 'environment', status: 'pending', owner: 'DBA' },
+        { dependency: 'Admin unlock API endpoint must be complete before Day 4', type: 'team', status: 'pending', owner: 'Backend Dev' },
+      ],
+      definitionOfDone: [
+        'All acceptance criteria verified with test evidence',
+        'Automated tests added for all P0 scenarios',
+        'Regression suite passed with ≥ 95% pass rate',
+        'No open P0/P1 defects',
+        'Test summary report delivered',
+        'Stakeholder sign-off recorded',
+        'Knowledge base / test documentation updated',
+      ],
+      risks: [
+        { risk: 'Twilio sandbox rate limits may block SMS testing', mitigation: 'Use mock SMS in QA, real SMS in staging only for final verification', probability: 'medium' },
+        { risk: 'Account lockout threshold may need tuning after UAT feedback', mitigation: 'Make lockout threshold configurable (env variable), plan for quick config change', probability: 'medium' },
+        { risk: 'Session timeout fix regression could break existing sessions', mitigation: 'Comprehensive session regression suite on Day 6, monitor error rates post-deploy', probability: 'low' },
+      ],
+      markdownOutput: '# Sprint 24 Test Plan — Auth Improvements\n\n**[Company Name]** | **[Project Name]**\n\n| Field | Value |\n|-------|-------|\n| Sprint | Sprint 24 |\n| Dates | Mar 18–29, 2026 |\n| Version | 1.0 |\n| Author | QA Lead |\n| Status | Draft |\n\n---\n\n## 1. Test Objective\n\nValidate all authentication enhancements (2FA, social login, account lockout) are secure, accessible, and regression-free.\n\n## 2. Scope\n\n### In Scope\n- US-401: 2FA via SMS and authenticator\n- US-402: Remember device for 2FA\n- US-404: Account lockout after 5 failures\n- BUG-891: Session timeout redirect fix\n\n### Out of Scope\n- US-405: Social login (moved to Sprint 25)\n- Performance load testing (hardening sprint)\n\n---\n\n## Document Approval\n\n| Role | Name | Decision | Date |\n|------|------|----------|------|\n| QA Lead | ____________ | ____________ | ____________ |\n| Dev Lead | ____________ | ____________ | ____________ |\n| PM | ____________ | ____________ | ____________ |',
+    });
   }
   if (systemPrompt.includes('principal test automation architect') || systemPrompt.includes('automation')) {
     return JSON.stringify({
