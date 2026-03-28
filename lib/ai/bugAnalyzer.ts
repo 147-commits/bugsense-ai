@@ -1029,44 +1029,103 @@ Return ONLY valid JSON:
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 12. COVERAGE EXPANDER (NEW!)
+// 12. COVERAGE EXPANDER — Enterprise Coverage Analysis
 // ═══════════════════════════════════════════════════════════════
 export async function expandCoverage(existingTests: string, expansionType: 'edge_cases' | 'negative' | 'security' | 'performance' | 'accessibility' | 'all') {
-  const systemPrompt = `You are a QA coverage expert. Given existing test cases, generate ADDITIONAL tests to expand coverage.
+  const focusAreas = expansionType === 'all'
+    ? 'ALL areas: edge cases, negative testing, security, performance, accessibility, requirements coverage, test design technique coverage'
+    : expansionType;
 
-Expansion focus: ${expansionType}
+  const systemPrompt = `You are a principal QA coverage analyst at a Fortune 500 company. Analyze existing test cases and produce an enterprise-grade coverage expansion report.
 
-Analyze the existing tests and identify gaps, then generate new test cases that cover:
-${expansionType === 'edge_cases' || expansionType === 'all' ? '- Edge cases not yet covered (boundaries, nulls, unicode, concurrent ops)' : ''}
-${expansionType === 'negative' || expansionType === 'all' ? '- Negative scenarios (invalid inputs, unauthorized, race conditions)' : ''}
-${expansionType === 'security' || expansionType === 'all' ? '- Security tests (injection, XSS, CSRF, auth bypass, data leaks)' : ''}
-${expansionType === 'performance' || expansionType === 'all' ? '- Performance tests (load, stress, memory, response time)' : ''}
-${expansionType === 'accessibility' || expansionType === 'all' ? '- Accessibility tests (WCAG compliance, screen readers, keyboard)' : ''}
+Expansion focus: ${focusAreas}
+
+ANALYSIS REQUIREMENTS — perform ALL of these gap analyses:
+
+1. REQUIREMENTS COVERAGE: Infer acceptance criteria from the test names. Which criteria likely exist but lack test cases?
+2. TEST DESIGN TECHNIQUE COVERAGE: Which techniques are missing?
+   - BVA (Boundary Value Analysis): Are min/max/boundary values tested?
+   - EP (Equivalence Partitioning): Are valid/invalid input classes covered?
+   - Decision Table: Are all condition combinations tested?
+   - State Transition: Are all state changes tested (e.g., logged out → logged in → session expired)?
+   - Error Guessing: Are common failure modes tested?
+3. RISK COVERAGE: Which high-risk areas have insufficient testing?
+4. NEGATIVE TESTING COVERAGE: What error conditions, invalid inputs, and failure modes aren't tested?
+5. NON-FUNCTIONAL COVERAGE: Performance, security, accessibility, usability gaps
+
+COVERAGE METRICS — calculate and report:
+- Current estimated coverage score (%) with breakdown: requirements %, positive path %, negative %, edge case %, security %, performance %, accessibility %
+- Projected coverage after adding recommended tests
+- Coverage by module/feature — heat map table: Module, Current %, Projected %, Gap Count, Risk Level
+
+NEW TEST CASES — each must include:
+- Which specific gap it closes (reference the gap ID)
+- Which test design technique it uses (BVA/EP/DT/ST/EG — label explicitly)
+- Risk priority with justification (why this priority, not arbitrary)
+- Estimated coverage improvement for this specific test
+- Effort estimate (minutes to write + execute)
+
+PRIORITIZATION: Order new tests by coverage gain per effort — highest impact first.
 
 Return ONLY valid JSON:
 {
   "analysis": {
-    "existingCoverage": "What the current tests cover",
-    "gaps": ["Gap 1", "Gap 2"],
-    "currentScore": 65,
-    "projectedScore": 88
+    "existingCoverage": "Detailed description of what current tests cover well",
+    "coverageBreakdown": {
+      "requirements": 0,
+      "positivePath": 0,
+      "negative": 0,
+      "edgeCase": 0,
+      "security": 0,
+      "performance": 0,
+      "accessibility": 0
+    },
+    "currentScore": 0,
+    "projectedScore": 0,
+    "gaps": ["Gap 1 description"]
   },
-  "newTestCases": [
+  "gapAnalysis": [
     {
-      "category": "edge_case|negative|security|performance|accessibility",
-      "title": "Test title",
-      "description": "What this test catches",
-      "steps": ["Step 1"],
-      "expectedResult": "Expected outcome",
-      "priority": "P0|P1|P2|P3",
-      "whyNeeded": "What bug this could catch"
+      "gapId": "GAP-001",
+      "category": "requirements|technique|risk|negative|non_functional",
+      "description": "Specific gap description",
+      "riskLevel": "High|Medium|Low",
+      "affectedArea": "Module or feature affected",
+      "missingTechnique": "BVA|EP|DT|ST|EG|N/A",
+      "impact": "What could go wrong if this gap remains"
     }
   ],
-  "totalNewTests": 0,
-  "coverageImprovement": "+23%"
+  "coverageHeatMap": [
+    { "module": "Module name", "currentCoverage": 0, "projectedCoverage": 0, "gapCount": 0, "riskLevel": "High|Medium|Low" }
+  ],
+  "newTestCases": [
+    {
+      "category": "edge_case|negative|security|performance|accessibility|functional",
+      "title": "Specific test title",
+      "description": "What this test verifies and why it matters",
+      "closesGap": "GAP-001",
+      "testDesignTechnique": "BVA|EP|DT|ST|EG",
+      "steps": ["Specific step 1", "Specific step 2"],
+      "expectedResult": "Specific expected outcome",
+      "priority": "P0|P1|P2|P3",
+      "priorityJustification": "Why this priority — tied to risk",
+      "coverageImprovement": "+3%",
+      "effortMinutes": 30,
+      "whyNeeded": "What specific bug could reach production without this test"
+    }
+  ],
+  "prioritizedOrder": ["TC-ID-1 (+5%, 20min)", "TC-ID-2 (+3%, 15min)"],
+  "resourceEstimate": {
+    "totalNewTests": 0,
+    "totalDesignHours": 0,
+    "totalExecutionHours": 0,
+    "totalAutomationHours": 0
+  },
+  "coverageImprovement": "+X%",
+  "executiveSummary": "2-3 sentence summary: current state, key gaps, projected improvement, recommended priority"
 }`;
 
-  const response = await callAI(systemPrompt, `Existing Tests:\n${existingTests}`);
+  const response = await callAI(systemPrompt, `Existing Test Cases:\n${existingTests}`);
   return extractJSON(response);
 }
 
@@ -2425,8 +2484,104 @@ export default defineConfig({
       debugCommand: 'npx playwright test --debug',
     });
   }
-  if (systemPrompt.includes('coverage expert')) {
-    return JSON.stringify({ analysis: { existingCoverage: 'Basic happy path tests', gaps: ['No negative tests', 'No edge cases', 'No security tests'], currentScore: 45, projectedScore: 78 }, newTestCases: [{ category: 'negative', title: 'Invalid input handling', description: 'Test with malformed data', steps: ['Submit empty form', 'Check error messages'], expectedResult: 'Proper validation errors shown', priority: 'P1', whyNeeded: 'Could miss validation bugs' }], totalNewTests: 5, coverageImprovement: '+33%' });
+  if (systemPrompt.includes('principal QA coverage analyst') || systemPrompt.includes('coverage expert')) {
+    return JSON.stringify({
+      analysis: {
+        existingCoverage: 'Current tests cover the basic happy path for login (valid credentials, redirect, remember me) and one negative case (wrong password). No boundary testing, no security testing, no accessibility testing, and no state transition coverage (e.g., locked account, expired session).',
+        coverageBreakdown: { requirements: 60, positivePath: 80, negative: 15, edgeCase: 5, security: 0, performance: 0, accessibility: 0 },
+        currentScore: 35,
+        projectedScore: 78,
+        gaps: ['No boundary value testing (password length limits, email format limits)', 'No security testing (XSS, SQL injection, brute force)', 'No accessibility testing (keyboard nav, screen reader)', 'No state transition coverage (locked → unlocked, session expired)', 'No concurrent session testing', 'Missing error message validation for each failure type'],
+      },
+      gapAnalysis: [
+        { gapId: 'GAP-001', category: 'technique', description: 'No Boundary Value Analysis applied — password min/max length, email format boundaries not tested', riskLevel: 'High', affectedArea: 'Login Form Validation', missingTechnique: 'BVA', impact: 'Users could set 1-character passwords or bypass length validation' },
+        { gapId: 'GAP-002', category: 'negative', description: 'Account lockout after failed attempts not tested — no test verifies lockout trigger, duration, or unlock', riskLevel: 'High', affectedArea: 'Authentication Security', missingTechnique: 'ST', impact: 'Brute force attacks could succeed if lockout is broken' },
+        { gapId: 'GAP-003', category: 'non_functional', description: 'No XSS or SQL injection testing on login fields', riskLevel: 'High', affectedArea: 'Login Form', missingTechnique: 'EG', impact: 'Injection vulnerabilities could expose user data or allow unauthorized access' },
+        { gapId: 'GAP-004', category: 'technique', description: 'No Equivalence Partitioning — valid/invalid email classes not systematically tested', riskLevel: 'Medium', affectedArea: 'Email Validation', missingTechnique: 'EP', impact: 'Edge-case email formats (plus addressing, subdomains) might fail silently' },
+        { gapId: 'GAP-005', category: 'non_functional', description: 'No keyboard navigation or screen reader testing for login form', riskLevel: 'Medium', affectedArea: 'Login Page Accessibility', missingTechnique: 'N/A', impact: 'Login page may be inaccessible to users with disabilities (WCAG violation)' },
+        { gapId: 'GAP-006', category: 'risk', description: 'No concurrent session testing — what happens when user logs in from two devices', riskLevel: 'Medium', affectedArea: 'Session Management', missingTechnique: 'ST', impact: 'Session conflicts could cause data corruption or security issues' },
+      ],
+      coverageHeatMap: [
+        { module: 'Login Form UI', currentCoverage: 60, projectedCoverage: 90, gapCount: 2, riskLevel: 'Medium' },
+        { module: 'Authentication Logic', currentCoverage: 40, projectedCoverage: 85, gapCount: 3, riskLevel: 'High' },
+        { module: 'Session Management', currentCoverage: 20, projectedCoverage: 70, gapCount: 2, riskLevel: 'High' },
+        { module: 'Security', currentCoverage: 0, projectedCoverage: 60, gapCount: 2, riskLevel: 'High' },
+        { module: 'Accessibility', currentCoverage: 0, projectedCoverage: 50, gapCount: 1, riskLevel: 'Medium' },
+      ],
+      newTestCases: [
+        {
+          category: 'edge_case', title: 'Login with minimum valid password (exactly 8 characters)',
+          description: 'Verify the system accepts the shortest valid password at the exact boundary',
+          closesGap: 'GAP-001', testDesignTechnique: 'BVA',
+          steps: ['Navigate to /login', 'Enter valid email: test@company.com', 'Enter 8-character password: Abcde1!x', 'Click Sign In'],
+          expectedResult: 'Login succeeds — user redirected to /dashboard',
+          priority: 'P1', priorityJustification: 'P1 because boundary values are the most common source of off-by-one validation bugs',
+          coverageImprovement: '+4%', effortMinutes: 15,
+          whyNeeded: 'Password validation might reject exactly-8-char passwords (off-by-one: checking > 8 instead of >= 8)',
+        },
+        {
+          category: 'negative', title: 'Account locks after 5 consecutive failed login attempts',
+          description: 'Verify brute force protection by testing the lockout threshold and duration',
+          closesGap: 'GAP-002', testDesignTechnique: 'ST',
+          steps: ['Navigate to /login', 'Enter valid email: test@company.com', 'Enter wrong password 5 times consecutively', 'Verify account locked message on 5th attempt', 'Wait 15 minutes (or mock time)', 'Attempt login with correct password'],
+          expectedResult: 'Account locked after attempt 5, unlocked after 15 minutes, correct password works after unlock',
+          priority: 'P0', priorityJustification: 'P0 because broken lockout = brute force vulnerability, which is a critical security control',
+          coverageImprovement: '+6%', effortMinutes: 25,
+          whyNeeded: 'Without this test, attackers could brute-force passwords indefinitely if lockout is broken',
+        },
+        {
+          category: 'security', title: 'SQL injection in email field returns safe error',
+          description: 'Verify the login form safely handles SQL injection payloads without exposing database errors',
+          closesGap: 'GAP-003', testDesignTechnique: 'EG',
+          steps: ["Navigate to /login", "Enter email: ' OR '1'='1'; DROP TABLE users; --", "Enter any password", "Click Sign In"],
+          expectedResult: 'Returns 400 or 401 error. No SQL error in response. No data leaked. Application remains functional.',
+          priority: 'P0', priorityJustification: 'P0 because SQL injection is OWASP Top 1 — successful injection could expose entire user database',
+          coverageImprovement: '+5%', effortMinutes: 15,
+          whyNeeded: 'Even with ORM, misconfigured raw queries could expose SQL injection. This is a baseline security test.',
+        },
+        {
+          category: 'edge_case', title: 'Login with plus-addressed email (user+tag@domain.com)',
+          description: 'Verify the system accepts RFC 5322 compliant plus addressing in email field',
+          closesGap: 'GAP-004', testDesignTechnique: 'EP',
+          steps: ['Navigate to /login', 'Enter email: user+test@company.com', 'Enter valid password', 'Click Sign In'],
+          expectedResult: 'Login succeeds if account exists, or shows "Invalid credentials" (not "Invalid email format")',
+          priority: 'P2', priorityJustification: 'P2 because plus addressing is valid RFC 5322 but commonly rejected — affects power users',
+          coverageImprovement: '+2%', effortMinutes: 10,
+          whyNeeded: 'Some email validation rejects + character, blocking legitimate users who use plus addressing for filtering',
+        },
+        {
+          category: 'accessibility', title: 'Login form is fully keyboard navigable',
+          description: 'Verify all login form elements can be reached and activated using only the keyboard',
+          closesGap: 'GAP-005', testDesignTechnique: 'EG',
+          steps: ['Navigate to /login', 'Press Tab — verify focus moves to Email field with visible focus ring', 'Press Tab — verify focus moves to Password field', 'Press Tab — verify focus moves to Sign In button', 'Press Enter on Sign In — verify form submits', 'Verify no focus traps exist'],
+          expectedResult: 'All elements reachable via Tab. Focus ring visible on each. Enter activates Sign In. No focus traps.',
+          priority: 'P1', priorityJustification: 'P1 because keyboard-only users (motor disabilities) are completely blocked if form is not navigable',
+          coverageImprovement: '+4%', effortMinutes: 20,
+          whyNeeded: 'Login is the first interaction — if inaccessible, disabled users cannot use the application at all',
+        },
+        {
+          category: 'negative', title: 'Concurrent login from two devices invalidates first session',
+          description: 'Verify session management when a user logs in from a second device',
+          closesGap: 'GAP-006', testDesignTechnique: 'ST',
+          steps: ['Login from Device A (browser 1)', 'Verify session active on Device A', 'Login from Device B (browser 2) with same credentials', 'Return to Device A and perform an action', 'Verify Device A session is invalidated or still valid (document which behavior)'],
+          expectedResult: 'Either: (a) Device A session invalidated with redirect to /login, or (b) both sessions active. Behavior must be consistent and documented.',
+          priority: 'P2', priorityJustification: 'P2 because concurrent session behavior must be intentional, not accidental — security implications either way',
+          coverageImprovement: '+3%', effortMinutes: 25,
+          whyNeeded: 'Undefined concurrent session behavior could allow attackers to maintain persistent access after password change',
+        },
+      ],
+      prioritizedOrder: [
+        'Account lockout (+6%, 25min, P0)',
+        'SQL injection (+5%, 15min, P0)',
+        'Password boundary (+4%, 15min, P1)',
+        'Keyboard navigation (+4%, 20min, P1)',
+        'Concurrent sessions (+3%, 25min, P2)',
+        'Plus-addressed email (+2%, 10min, P2)',
+      ],
+      resourceEstimate: { totalNewTests: 6, totalDesignHours: 2, totalExecutionHours: 1.5, totalAutomationHours: 3 },
+      coverageImprovement: '+43%',
+      executiveSummary: 'Current test suite covers 35% — primarily happy path with one negative case. Critical gaps in security (0%), accessibility (0%), and state transition testing. Adding 6 prioritized test cases would raise coverage to 78%. Highest priority: account lockout (P0) and SQL injection (P0) — both represent critical security controls with zero current coverage.',
+    });
   }
 
   if (systemPrompt.includes('QA Director') || systemPrompt.includes('QA Lead') || systemPrompt.includes('QA Manager') || systemPrompt.includes('QA Process Lead') || systemPrompt.includes('QA Analytics Lead') || systemPrompt.includes('QA Risk Manager') || systemPrompt.includes('QA Infrastructure') || systemPrompt.includes('DevOps/QA') || systemPrompt.includes('Business Analyst')) {
