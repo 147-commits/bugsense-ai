@@ -485,52 +485,107 @@ Return ONLY valid JSON:
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 7. API TEST SCRIPT GENERATOR (NEW!)
+// 7. API TEST SCRIPT GENERATOR — Enterprise / REST-assured Pattern
 // ═══════════════════════════════════════════════════════════════
 export async function generateAPITests(apiDescription: string, format: 'postman' | 'curl' | 'playwright' | 'cypress' | 'jest' | 'supertest') {
   const formatInstructions: Record<string, string> = {
-    postman: 'Postman collection JSON format (v2.1) with pre-request scripts and tests',
-    curl: 'cURL commands with headers, body, and expected response comments',
-    playwright: 'Playwright API testing code using request context (TypeScript)',
-    cypress: 'Cypress API testing code with cy.request (TypeScript)',
-    jest: 'Jest + Supertest API testing code (TypeScript)',
-    supertest: 'Supertest standalone API testing code (TypeScript)',
+    postman: `Postman Collection v2.1 JSON. Structure:
+- Collection-level pre-request script that sets auth token from environment variable
+- Folder hierarchy grouped by test category (Happy Path, Auth, Validation, Edge Cases)
+- Each request uses {{BASE_URL}} and {{AUTH_TOKEN}} variables (never hardcoded)
+- Test scripts use pm.test(), pm.expect(), pm.response.to.have.jsonSchema()
+- Include pm.environment.set() for correlation IDs`,
+    curl: `cURL commands with:
+- Environment variable placeholders ($BASE_URL, $AUTH_TOKEN)
+- Full headers including Content-Type, Authorization, X-Request-ID
+- Expected response as comments with status code and body
+- Comments explaining WHY each test exists`,
+    playwright: `Playwright API testing (TypeScript) with:
+- import { test, expect } from '@playwright/test'
+- test.describe() blocks grouped by category
+- request.newContext() with baseURL from env
+- Full type definitions for request/response
+- beforeAll/afterAll hooks for setup/teardown
+- Helper function for auth token management`,
+    cypress: `Cypress API testing (TypeScript) with:
+- cy.request() with baseUrl from cypress.env
+- describe/it blocks grouped by category
+- beforeEach hooks for auth
+- cy.wrap() for async assertions`,
+    jest: `Jest + Supertest (TypeScript) with:
+- import supertest from 'supertest'
+- describe/it blocks grouped by category
+- beforeAll/afterAll for server setup and teardown
+- Type interfaces for API responses
+- Helper functions for auth and common assertions`,
+    supertest: `Supertest standalone (TypeScript) with:
+- Full supertest chain assertions
+- describe/it blocks grouped by category
+- beforeAll/afterAll hooks
+- Type definitions`,
   };
 
-  const systemPrompt = `You are an API test automation expert. Generate comprehensive API test scripts.
+  const systemPrompt = `You are a principal API test automation engineer at a Fortune 500 company. Generate production-ready API test suites following enterprise patterns.
 
-Given an API endpoint description, generate test scripts in ${formatInstructions[format]} format.
+Given an API endpoint description, generate tests in this format: ${formatInstructions[format]}
 
-Cover these scenarios:
-- Happy path (valid request, correct response)
-- Authentication (missing/invalid/expired tokens)
-- Validation (missing fields, wrong types, boundary values)
-- Error handling (404, 500, timeout)
-- Edge cases (empty body, large payload, special characters)
+EVERY test script MUST include ALL of these assertion layers (not just status code):
+1. STATUS CODE validation (correct success AND error codes)
+2. RESPONSE TIME SLA check (e.g., expect response time < 500ms)
+3. JSON SCHEMA validation (validate entire response structure, not just one field)
+4. CONTENT-TYPE header verification (application/json)
+5. RESPONSE BODY field validation (existence, type, AND value where predictable)
+6. ARRAY LENGTH and nested object checks where applicable
+7. ERROR RESPONSE format validation (errors should have consistent {error, message, statusCode} structure)
+
+REQUIRED TEST CATEGORIES — generate 8-12 tests covering ALL of these:
+1. HAPPY PATH (2-3 tests): Valid request with full response body validation, verify all fields exist with correct types
+2. AUTHENTICATION (2-3 tests): Missing token → 401, invalid/malformed token → 401, expired token → 401
+3. AUTHORIZATION (1 test): Valid token but wrong role/permissions → 403
+4. VALIDATION (2-3 tests): Missing required field → 400 with field name in error, wrong type → 400, boundary values (min/max length, numeric limits)
+5. NOT FOUND (1 test): Invalid/non-existent ID → 404 with consistent error format
+6. EDGE CASES (2-3 tests): Empty body → appropriate error, very large payload (>1MB), special characters and SQL injection attempt in string fields, unicode/emoji in text fields
+7. IDEMPOTENCY (1 test): For POST/PUT — repeated identical calls produce same result or appropriate conflict response
+8. RATE LIMITING (1 test): Document expected 429 behavior, include Retry-After header check
+
+ENTERPRISE METADATA — include in every test suite:
+- Environment config: BASE_URL, AUTH_TOKEN, TEST_USER_ID as variables (NEVER hardcoded values)
+- Setup code: create test data in beforeAll, clean up in afterAll
+- X-Request-ID / X-Correlation-ID header in every request for traceability
+- Comments explaining WHY each test exists (the business reason, not just "tests auth")
+- Console.log / debug mode flag for full request/response logging
 
 Return ONLY valid JSON:
 {
   "endpoint": {
     "method": "GET|POST|PUT|DELETE|PATCH",
     "path": "/api/example",
-    "description": "What this endpoint does"
+    "description": "What this endpoint does",
+    "authentication": "Bearer token | API key | None",
+    "rateLimit": "Documented rate limit or 'Not specified'"
   },
   "testScripts": [
     {
-      "name": "Test name",
-      "description": "What this test checks",
-      "category": "happy_path|auth|validation|error|edge_case",
-      "code": "// the actual test code"
+      "name": "Descriptive test name",
+      "description": "What this test verifies and WHY it matters",
+      "category": "happy_path|auth|authorization|validation|not_found|edge_case|idempotency|rate_limit",
+      "assertions": ["Status 200", "Response time < 500ms", "JSON schema valid", "Content-Type: application/json", "Body contains user.id (string)"],
+      "code": "// Production-ready test code with all assertion layers"
     }
   ],
-  "setupCode": "// any setup/teardown code needed",
-  "envVariables": { "BASE_URL": "http://localhost:3000", "AUTH_TOKEN": "test-token" },
+  "setupCode": "// beforeAll: create test user, get auth token\\n// afterAll: delete test user, clean up",
+  "teardownCode": "// Cleanup code for afterAll",
+  "envVariables": {
+    "BASE_URL": "http://localhost:3000",
+    "AUTH_TOKEN": "{{generated_at_runtime}}",
+    "TEST_USER_ID": "{{created_in_setup}}",
+    "REQUEST_TIMEOUT_MS": "5000",
+    "DEBUG_LOGGING": "false"
+  },
   "totalTests": 0
-}
+}`;
 
-Generate 6-10 test scripts. Make the code production-ready and copy-pasteable.`;
-
-  const response = await callAI(systemPrompt, `API Description:\n${apiDescription}\n\nFormat: ${format}`);
+  const response = await callAI(systemPrompt, `API Endpoint Description:\n${apiDescription}\n\nOutput Format: ${format}`);
   return extractJSON(response);
 }
 
@@ -1225,11 +1280,246 @@ function getMockResponse(systemPrompt: string, _userMessage: string): string {
       },
     });
   }
-  if (systemPrompt.includes('API test automation')) {
-    return JSON.stringify({ endpoint: { method: 'POST', path: '/api/login', description: 'User authentication endpoint' }, testScripts: [
-      { name: 'Valid login returns 200', description: 'Test successful authentication', category: 'happy_path', code: '// Test code here' },
-      { name: 'Missing password returns 400', description: 'Test validation', category: 'validation', code: '// Test code here' },
-    ], setupCode: '// Setup code', envVariables: { BASE_URL: 'http://localhost:3000' }, totalTests: 2 });
+  if (systemPrompt.includes('principal API test automation') || systemPrompt.includes('API test automation')) {
+    return JSON.stringify({
+      endpoint: { method: 'POST', path: '/api/auth/login', description: 'Authenticates a user with email and password, returns JWT token and user profile', authentication: 'None (this is the login endpoint)', rateLimit: '5 requests per minute per IP' },
+      testScripts: [
+        {
+          name: 'Happy path: Valid login returns 200 with token and user profile',
+          description: 'WHY: Core authentication flow — if this breaks, no user can access the application. Validates complete response schema, not just status code.',
+          category: 'happy_path',
+          assertions: ['Status 200', 'Response time < 500ms', 'Content-Type: application/json', 'Body contains token (string, JWT format)', 'Body contains user.id (string)', 'Body contains user.email (string, matches input)', 'Body contains user.name (string)'],
+          code: `import { test, expect } from '@playwright/test';
+
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+const REQUEST_ID = \`test-\${Date.now()}\`;
+
+test.describe('POST /api/auth/login - Happy Path', () => {
+  test('valid credentials return 200 with token and user profile', async ({ request }) => {
+    const startTime = Date.now();
+    const response = await request.post(\`\${BASE_URL}/api/auth/login\`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Request-ID': REQUEST_ID,
+      },
+      data: {
+        email: 'qa.tester@company.com',
+        password: 'SecureP@ss123!',
+      },
+    });
+    const elapsed = Date.now() - startTime;
+
+    // 1. Status code
+    expect(response.status()).toBe(200);
+
+    // 2. Response time SLA
+    expect(elapsed).toBeLessThan(500);
+
+    // 3. Content-Type header
+    expect(response.headers()['content-type']).toContain('application/json');
+
+    // 4. JSON schema & field validation
+    const body = await response.json();
+    expect(body).toHaveProperty('token');
+    expect(typeof body.token).toBe('string');
+    expect(body.token.split('.')).toHaveLength(3); // JWT format: header.payload.signature
+
+    expect(body).toHaveProperty('user');
+    expect(typeof body.user.id).toBe('string');
+    expect(body.user.email).toBe('qa.tester@company.com');
+    expect(typeof body.user.name).toBe('string');
+    expect(body.user).not.toHaveProperty('password');
+    expect(body.user).not.toHaveProperty('passwordHash');
+  });
+});`,
+        },
+        {
+          name: 'Auth: Missing Authorization token returns 401',
+          description: 'WHY: Unauthenticated requests to protected endpoints must be rejected. Verifies consistent error response format.',
+          category: 'auth',
+          assertions: ['Status 401', 'Content-Type: application/json', 'Error response has consistent structure {error, message}'],
+          code: `test('missing auth token returns 401 with error body', async ({ request }) => {
+  const response = await request.get(\`\${BASE_URL}/api/users/me\`, {
+    headers: { 'X-Request-ID': \`test-noauth-\${Date.now()}\` },
+    // Intentionally no Authorization header
+  });
+
+  expect(response.status()).toBe(401);
+  expect(response.headers()['content-type']).toContain('application/json');
+
+  const body = await response.json();
+  expect(body).toHaveProperty('error');
+  expect(body.error).toBe('Unauthorized');
+});`,
+        },
+        {
+          name: 'Auth: Invalid/malformed token returns 401',
+          description: 'WHY: Prevents access with forged or corrupted tokens. Ensures the server validates token signature, not just presence.',
+          category: 'auth',
+          assertions: ['Status 401', 'Rejects malformed JWT', 'Consistent error format'],
+          code: `test('malformed token returns 401', async ({ request }) => {
+  const response = await request.get(\`\${BASE_URL}/api/users/me\`, {
+    headers: {
+      'Authorization': 'Bearer this.is.not.a.valid.jwt.token',
+      'X-Request-ID': \`test-badtoken-\${Date.now()}\`,
+    },
+  });
+
+  expect(response.status()).toBe(401);
+  const body = await response.json();
+  expect(body).toHaveProperty('error');
+});`,
+        },
+        {
+          name: 'Validation: Missing required email field returns 400',
+          description: 'WHY: API must reject incomplete payloads with field-specific error messages so clients can display correct form errors.',
+          category: 'validation',
+          assertions: ['Status 400', 'Error message references missing field name', 'Response time < 200ms (validation is fast)'],
+          code: `test('missing email returns 400 with field-specific error', async ({ request }) => {
+  const startTime = Date.now();
+  const response = await request.post(\`\${BASE_URL}/api/auth/login\`, {
+    headers: { 'Content-Type': 'application/json', 'X-Request-ID': \`test-noemail-\${Date.now()}\` },
+    data: { password: 'SecureP@ss123!' },
+    // email intentionally omitted
+  });
+  const elapsed = Date.now() - startTime;
+
+  expect(response.status()).toBe(400);
+  expect(elapsed).toBeLessThan(200); // Validation should be fast
+  expect(response.headers()['content-type']).toContain('application/json');
+
+  const body = await response.json();
+  expect(body).toHaveProperty('error');
+  expect(body.error.toLowerCase()).toContain('email');
+});`,
+        },
+        {
+          name: 'Validation: Wrong field type (number instead of string) returns 400',
+          description: 'WHY: Type coercion bugs can cause downstream errors. API should reject wrong types at the boundary.',
+          category: 'validation',
+          assertions: ['Status 400', 'Rejects numeric email', 'Consistent error format'],
+          code: `test('numeric email returns 400', async ({ request }) => {
+  const response = await request.post(\`\${BASE_URL}/api/auth/login\`, {
+    headers: { 'Content-Type': 'application/json' },
+    data: { email: 12345, password: 'SecureP@ss123!' },
+  });
+
+  expect(response.status()).toBe(400);
+  const body = await response.json();
+  expect(body).toHaveProperty('error');
+});`,
+        },
+        {
+          name: 'Edge case: Empty request body returns 400',
+          description: 'WHY: Empty bodies can cause unhandled JSON parse errors or null pointer exceptions if not explicitly validated.',
+          category: 'edge_case',
+          assertions: ['Status 400', 'Does not return 500 (no unhandled exception)', 'Consistent error format'],
+          code: `test('empty body returns 400, not 500', async ({ request }) => {
+  const response = await request.post(\`\${BASE_URL}/api/auth/login\`, {
+    headers: { 'Content-Type': 'application/json' },
+    data: {},
+  });
+
+  // Must be 400 (client error), never 500 (server crash)
+  expect(response.status()).toBe(400);
+  expect(response.status()).not.toBe(500);
+
+  const body = await response.json();
+  expect(body).toHaveProperty('error');
+});`,
+        },
+        {
+          name: 'Edge case: SQL injection in email field is safely handled',
+          description: "WHY: SQL injection is OWASP #1. Even if using an ORM, we must verify the API doesn't expose raw DB errors or allow injection.",
+          category: 'edge_case',
+          assertions: ['Status 400 or 401 (not 500)', 'No SQL error in response body', 'No data leakage'],
+          code: `test('SQL injection attempt returns safe error', async ({ request }) => {
+  const response = await request.post(\`\${BASE_URL}/api/auth/login\`, {
+    headers: { 'Content-Type': 'application/json' },
+    data: {
+      email: "' OR '1'='1'; DROP TABLE users; --",
+      password: 'anything',
+    },
+  });
+
+  // Should be 400 (invalid email) or 401 (invalid credentials), never 500
+  expect([400, 401]).toContain(response.status());
+
+  const body = await response.json();
+  const bodyStr = JSON.stringify(body).toLowerCase();
+  // Must not leak SQL errors
+  expect(bodyStr).not.toContain('syntax error');
+  expect(bodyStr).not.toContain('pg_');
+  expect(bodyStr).not.toContain('select');
+  expect(bodyStr).not.toContain('table');
+});`,
+        },
+        {
+          name: 'Rate limit: Repeated requests trigger 429',
+          description: 'WHY: Login endpoints are brute-force targets. Rate limiting is a security requirement. Verify Retry-After header is present.',
+          category: 'rate_limit',
+          assertions: ['Status 429 after exceeding limit', 'Retry-After header present', 'Consistent error format'],
+          code: `test('exceeding rate limit returns 429 with Retry-After', async ({ request }) => {
+  // Send requests up to the documented limit (5/min)
+  const results = [];
+  for (let i = 0; i < 7; i++) {
+    const response = await request.post(\`\${BASE_URL}/api/auth/login\`, {
+      headers: { 'Content-Type': 'application/json' },
+      data: { email: 'ratelimit@test.com', password: 'wrong' },
+    });
+    results.push(response.status());
+  }
+
+  // At least one request should be rate-limited
+  const rateLimited = results.filter(s => s === 429);
+  expect(rateLimited.length).toBeGreaterThan(0);
+
+  // Note: In real tests, also check response.headers()['retry-after']
+});`,
+        },
+      ],
+      setupCode: `// ── Setup & Teardown ────────────────────────────────────────
+import { test as setup } from '@playwright/test';
+
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+let authToken: string;
+let testUserId: string;
+
+// Create test user and get auth token before all tests
+setup.beforeAll(async ({ request }) => {
+  // Create test user
+  const createRes = await request.post(\`\${BASE_URL}/api/auth/register\`, {
+    data: { name: 'QA Tester', email: 'qa.tester@company.com', password: 'SecureP@ss123!' },
+  });
+  const user = await createRes.json();
+  testUserId = user.id;
+
+  // Get auth token
+  const loginRes = await request.post(\`\${BASE_URL}/api/auth/login\`, {
+    data: { email: 'qa.tester@company.com', password: 'SecureP@ss123!' },
+  });
+  const loginData = await loginRes.json();
+  authToken = loginData.token;
+});
+
+// Clean up test user after all tests
+setup.afterAll(async ({ request }) => {
+  if (testUserId) {
+    await request.delete(\`\${BASE_URL}/api/users/\${testUserId}\`, {
+      headers: { Authorization: \`Bearer \${authToken}\` },
+    });
+  }
+});`,
+      teardownCode: `// Cleanup is handled in afterAll above`,
+      envVariables: {
+        BASE_URL: 'http://localhost:3000',
+        AUTH_TOKEN: '{{generated_at_runtime_in_beforeAll}}',
+        TEST_USER_ID: '{{created_in_setup}}',
+        REQUEST_TIMEOUT_MS: '5000',
+        DEBUG_LOGGING: 'false',
+      },
+      totalTests: 8,
+    });
   }
   if (systemPrompt.includes('release notes')) {
     return JSON.stringify({ version: '2.5.0', date: new Date().toISOString().split('T')[0], title: 'Performance & Bug Fix Release', summary: 'Improved performance and fixed critical bugs', sections: { newFeatures: [{ title: 'Dark mode support', description: 'Full dark mode theme', ticket: 'FEAT-123' }], improvements: [{ title: 'Page load speed', description: '40% faster dashboard loading', ticket: 'PERF-456' }], bugFixes: [{ title: 'Login crash fix', description: 'Fixed SSO crash on OAuth callback', ticket: 'BUG-789', severity: 'critical' }], breakingChanges: [], knownIssues: [] }, markdownOutput: '# Release Notes v2.5.0\n...', slackOutput: '🚀 *v2.5.0 Released!*\n...' });
