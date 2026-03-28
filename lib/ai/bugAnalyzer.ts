@@ -593,35 +593,102 @@ Return ONLY valid JSON:
 // 8. RELEASE NOTES GENERATOR (NEW!)
 // ═══════════════════════════════════════════════════════════════
 export async function generateReleaseNotes(input: string, format: 'standard' | 'technical' | 'user-facing' | 'changelog' | 'slack') {
-  const systemPrompt = `You are a technical writer who creates clear, professional release notes.
+  const dateStr = new Date().toISOString().split('T')[0];
 
-Given a list of changes, bug fixes, Jira tickets, or commit messages, generate well-structured release notes.
+  const systemPrompt = `You are a principal technical writer at a company like Stripe or GitHub. Generate release notes following Keep a Changelog v1.1.0 and Semantic Versioning 2.0.0 standards.
 
-Format style: ${format}
-- standard: Professional release notes with sections
-- technical: Detailed technical changelog for developers
-- user-facing: Simple, non-technical notes for end users
-- changelog: CHANGELOG.md format (Keep a Changelog standard)
-- slack: Short Slack announcement format with emojis
+SEMANTIC VERSIONING LOGIC — analyze the input and apply:
+- Contains BREAKING CHANGES (removed features, incompatible API changes) → suggest MAJOR version bump
+- Contains NEW FEATURES (added functionality) → suggest MINOR version bump
+- Contains ONLY bug fixes and patches → suggest PATCH version bump
+- If input suggests pre-release quality → add label suggestion (alpha/beta/rc)
+
+KEEP A CHANGELOG CATEGORIES — use these EXACT categories:
+- Added: new features
+- Changed: changes in existing functionality
+- Deprecated: soon-to-be removed features
+- Removed: removed features
+- Fixed: bug fixes
+- Security: vulnerability fixes (ALWAYS list separately, never merge with Fixed)
+
+For EACH entry include: one-line description, ticket reference (JIRA-123 or commit hash), affected component/module.
+
+GENERATE ALL THREE OUTPUT VARIANTS:
+
+1. INTERNAL/ENGINEERING RELEASE NOTES (engineeringNotes):
+   - Full technical detail for each change
+   - Deployment steps required
+   - Database migrations (if any)
+   - Config/environment variable changes
+   - Rollback procedure for each significant change
+   - Breaking changes with before/after code examples
+   - Performance impact notes (e.g., "Reduces avg query time from 450ms to 120ms")
+   - Risk level per change: Low/Medium/High with justification
+   - Rollback complexity: Simple/Moderate/Complex
+   - Requires downtime: Yes/No
+   - API changes with before/after request/response examples
+
+2. CUSTOMER-FACING RELEASE NOTES (customerNotes):
+   - Benefit-focused language: what users can now DO (not what code changed)
+   - Grouped by user-visible impact, not technical category
+   - No technical jargon, no ticket numbers
+   - "Known Issues" with workarounds
+   - Professional tone matching Stripe/Slack/GitHub changelog style
+   - Each item starts with the user benefit
+
+3. SLACK ANNOUNCEMENT (slackOutput):
+   - Short, scannable format with emojis
+   - Max 5 key highlights
+   - Link placeholder to full release notes
+   - Call-out for breaking changes if any
+   - Celebratory but professional tone
 
 Return ONLY valid JSON:
 {
-  "version": "Suggested version number",
-  "date": "Release date",
+  "version": "Suggested SemVer (e.g., 2.5.0)",
+  "versionBump": "major|minor|patch",
+  "versionRationale": "Why this version bump was chosen",
+  "preReleaseLabel": "null or alpha|beta|rc",
+  "date": "${dateStr}",
   "title": "Release title",
-  "summary": "One-line summary of this release",
+  "summary": "One-line summary",
+  "changelog": {
+    "added": [{ "description": "One-line description", "ticket": "FEAT-123", "component": "Auth" }],
+    "changed": [{ "description": "", "ticket": "", "component": "" }],
+    "deprecated": [{ "description": "", "ticket": "", "component": "" }],
+    "removed": [{ "description": "", "ticket": "", "component": "" }],
+    "fixed": [{ "description": "", "ticket": "", "component": "", "severity": "critical|high|medium|low" }],
+    "security": [{ "description": "", "ticket": "", "component": "", "severity": "critical|high|medium|low" }]
+  },
+  "engineeringNotes": {
+    "deploymentSteps": ["Step 1", "Step 2"],
+    "migrations": [{ "type": "database|config|api", "description": "What to migrate", "command": "npx prisma migrate deploy", "rollbackCommand": "Rollback command" }],
+    "configChanges": [{ "variable": "ENV_VAR_NAME", "action": "add|change|remove", "value": "new-value", "description": "Why" }],
+    "breakingChanges": [{ "title": "Change title", "description": "What changed", "before": "Old code/API example", "after": "New code/API example", "migrationGuide": "Steps to migrate" }],
+    "performanceImpact": [{ "area": "Login API", "before": "450ms avg", "after": "120ms avg", "improvement": "73% faster" }],
+    "riskAssessment": { "overallRisk": "Low|Medium|High", "rollbackComplexity": "Simple|Moderate|Complex", "requiresDowntime": false, "justification": "Why this risk level" },
+    "rollbackProcedure": "Step-by-step rollback instructions",
+    "markdownOutput": "Complete engineering release notes in markdown"
+  },
+  "customerNotes": {
+    "highlights": [{ "title": "User-friendly title", "description": "What you can now do and why it matters" }],
+    "improvements": [{ "title": "", "description": "" }],
+    "fixes": [{ "title": "", "description": "" }],
+    "knownIssues": [{ "title": "", "description": "", "workaround": "" }],
+    "markdownOutput": "Complete customer-facing notes in markdown"
+  },
+  "slackOutput": "Complete Slack announcement message with emojis",
   "sections": {
-    "newFeatures": [{ "title": "Feature title", "description": "What it does", "ticket": "JIRA-123" }],
+    "newFeatures": [{ "title": "", "description": "", "ticket": "" }],
     "improvements": [{ "title": "", "description": "", "ticket": "" }],
-    "bugFixes": [{ "title": "", "description": "", "ticket": "", "severity": "critical|high|medium|low" }],
-    "breakingChanges": [{ "title": "", "description": "", "migration": "Migration steps if needed" }],
+    "bugFixes": [{ "title": "", "description": "", "ticket": "", "severity": "" }],
+    "breakingChanges": [{ "title": "", "description": "", "migration": "" }],
     "knownIssues": [{ "title": "", "description": "", "workaround": "" }]
   },
-  "markdownOutput": "The complete release notes in markdown format",
-  "slackOutput": "Short slack-friendly version"
+  "markdownOutput": "Full Keep a Changelog formatted markdown"
 }`;
 
-  const response = await callAI(systemPrompt, `Input (tickets/commits/changes):\n${input}\n\nFormat: ${format}`);
+  const response = await callAI(systemPrompt, `Input (tickets/commits/changes):\n${input}`);
   return extractJSON(response);
 }
 
@@ -1711,8 +1778,119 @@ setup.afterAll(async ({ request }) => {
       totalTests: 8,
     });
   }
-  if (systemPrompt.includes('release notes')) {
-    return JSON.stringify({ version: '2.5.0', date: new Date().toISOString().split('T')[0], title: 'Performance & Bug Fix Release', summary: 'Improved performance and fixed critical bugs', sections: { newFeatures: [{ title: 'Dark mode support', description: 'Full dark mode theme', ticket: 'FEAT-123' }], improvements: [{ title: 'Page load speed', description: '40% faster dashboard loading', ticket: 'PERF-456' }], bugFixes: [{ title: 'Login crash fix', description: 'Fixed SSO crash on OAuth callback', ticket: 'BUG-789', severity: 'critical' }], breakingChanges: [], knownIssues: [] }, markdownOutput: '# Release Notes v2.5.0\n...', slackOutput: '🚀 *v2.5.0 Released!*\n...' });
+  if (systemPrompt.includes('principal technical writer') || systemPrompt.includes('release notes')) {
+    const d = new Date().toISOString().split('T')[0];
+    return JSON.stringify({
+      version: '3.0.0',
+      versionBump: 'major',
+      versionRationale: 'Contains breaking change: removed /api/v1 endpoints. This requires a MAJOR version bump per SemVer 2.0.0.',
+      preReleaseLabel: null,
+      date: d,
+      title: 'Dark Mode, Performance Boost & v1 API Sunset',
+      summary: 'Adds dark mode, improves dashboard load speed by 40%, fixes critical SSO crash, and removes deprecated v1 API endpoints.',
+      changelog: {
+        added: [
+          { description: 'Dark mode theme with system preference detection', ticket: 'FEAT-123', component: 'UI/Theme' },
+          { description: 'File upload progress indicator with cancel support', ticket: 'FEAT-124', component: 'Upload' },
+        ],
+        changed: [
+          { description: 'Dashboard lazy-loads widgets — 40% faster initial render', ticket: 'PERF-456', component: 'Dashboard' },
+        ],
+        deprecated: [
+          { description: '/api/v1/webhooks endpoint — use /api/v2/webhooks instead. Will be removed in v4.0.0', ticket: 'DEP-010', component: 'API' },
+        ],
+        removed: [
+          { description: '/api/v1/* endpoints removed — all consumers must migrate to /api/v2/*', ticket: 'BREAK-001', component: 'API' },
+        ],
+        fixed: [
+          { description: 'SSO login crash when OAuth provider returns non-standard token format', ticket: 'BUG-789', component: 'Authentication', severity: 'critical' },
+          { description: 'Currency symbol not updating when user changes region', ticket: 'BUG-790', component: 'Localization', severity: 'medium' },
+          { description: 'Search pagination count incorrect after applying filters', ticket: 'BUG-791', component: 'Search', severity: 'low' },
+        ],
+        security: [
+          { description: 'Patched XSS vulnerability in user profile bio field (CVE-2026-XXXX)', ticket: 'SEC-101', component: 'User Profile', severity: 'high' },
+        ],
+      },
+      engineeringNotes: {
+        deploymentSteps: [
+          '1. Run database migrations: npx prisma migrate deploy',
+          '2. Set new env var: DARK_MODE_ENABLED=true',
+          '3. Deploy API service first (handles both v1 and v2 during rollout)',
+          '4. Deploy frontend after API is healthy',
+          '5. Verify health check: GET /api/health returns 200',
+          '6. Monitor error rates for 30 minutes post-deploy',
+        ],
+        migrations: [
+          { type: 'database', description: 'Add user_preferences.theme column (nullable, default null)', command: 'npx prisma migrate deploy', rollbackCommand: 'npx prisma migrate rollback --steps 1' },
+          { type: 'config', description: 'Add DARK_MODE_ENABLED env var', command: 'echo "DARK_MODE_ENABLED=true" >> .env', rollbackCommand: 'Remove DARK_MODE_ENABLED from .env' },
+        ],
+        configChanges: [
+          { variable: 'DARK_MODE_ENABLED', action: 'add', value: 'true', description: 'Feature flag for dark mode rollout' },
+          { variable: 'V1_API_SUNSET_DATE', action: 'remove', value: '', description: 'No longer needed — v1 is removed' },
+        ],
+        breakingChanges: [
+          {
+            title: 'Removed /api/v1/* endpoints',
+            description: 'All v1 API endpoints have been removed. Consumers must migrate to v2.',
+            before: 'GET /api/v1/users → { users: [...] }',
+            after: 'GET /api/v2/users → { data: [...], meta: { page, limit, total } }',
+            migrationGuide: '1. Update base URL from /api/v1 to /api/v2\n2. Update response parsing: users array is now under .data key\n3. Pagination uses meta object instead of X-Total-Count header',
+          },
+        ],
+        performanceImpact: [
+          { area: 'Dashboard initial load', before: '2.8s', after: '1.7s', improvement: '40% faster' },
+          { area: 'SSO login flow', before: 'Crash on non-standard tokens', after: '< 500ms with graceful fallback', improvement: 'Fixed crash + improved resilience' },
+        ],
+        riskAssessment: {
+          overallRisk: 'Medium',
+          rollbackComplexity: 'Moderate',
+          requiresDowntime: false,
+          justification: 'Breaking API change requires coordination with API consumers. Database migration is additive (nullable column) so rollback is safe. No downtime required — v2 endpoints already existed.',
+        },
+        rollbackProcedure: '1. Revert frontend to previous version\n2. Revert API to previous version (v1 endpoints will return)\n3. Rollback database migration: npx prisma migrate rollback --steps 1\n4. Remove DARK_MODE_ENABLED env var\n5. Verify health check and smoke test',
+        markdownOutput: `# Engineering Release Notes — v3.0.0\n\n**Date:** ${d}\n**Risk:** Medium | **Rollback:** Moderate | **Downtime:** No\n\n## Deployment Steps\n1. Run migrations\n2. Set env vars\n3. Deploy API → Frontend\n4. Monitor 30min\n\n## Breaking Changes\n### Removed /api/v1/* endpoints\nMigrate to /api/v2/*. See migration guide above.\n\n## Rollback\nRevert both services, rollback migration, remove env vars.`,
+      },
+      customerNotes: {
+        highlights: [
+          { title: 'Dark mode is here', description: 'Reduce eye strain with our new dark theme. It automatically matches your system preference, or you can set it manually in Settings.' },
+          { title: 'Faster dashboards', description: 'Your dashboard now loads 40% faster. We optimized how widgets render so you see your data sooner.' },
+          { title: 'See your upload progress', description: 'When uploading files, you now see a real-time progress bar with the option to cancel mid-upload.' },
+        ],
+        improvements: [
+          { title: 'Smoother currency switching', description: 'Changing your region now instantly updates all currency symbols across the app.' },
+          { title: 'More accurate search results', description: 'Pagination counts now stay correct when you filter your search results.' },
+        ],
+        fixes: [
+          { title: 'SSO login reliability', description: 'Fixed a rare issue where signing in with your company SSO could fail. SSO login is now more reliable across all identity providers.' },
+        ],
+        knownIssues: [
+          { title: 'Charts flicker on Safari 17', description: 'Some chart animations may flicker on Safari 17. This is being investigated.', workaround: 'Use Chrome or Firefox for the best experience, or disable animations in Settings > Accessibility.' },
+        ],
+        markdownOutput: `# What's New in v3.0.0\n\n## Highlights\n\n### 🌙 Dark mode is here\nReduce eye strain with our new dark theme.\n\n### ⚡ Faster dashboards\nYour dashboard now loads 40% faster.\n\n### 📤 See your upload progress\nReal-time progress bar with cancel support.\n\n## Improvements\n- Currency symbols update instantly when changing region\n- Search pagination counts are now accurate\n\n## Fixes\n- SSO login is now more reliable across all providers\n\n## Known Issues\n- Charts may flicker on Safari 17 (workaround: use Chrome/Firefox)`,
+      },
+      slackOutput: `🚀 *v3.0.0 Released — Dark Mode, Performance & API Sunset*\n\n✨ *Dark mode* — matches your system preference or set manually\n⚡ *40% faster dashboards* — optimized widget rendering\n🔒 *Security patch* — XSS vulnerability fixed in user profiles\n🐛 *SSO login fix* — resolved crash for enterprise SSO users\n\n⚠️ *Breaking:* /api/v1 endpoints have been removed. Migrate to /api/v2.\n\n📋 Full release notes: <https://docs.company.com/releases/v3.0.0|Read more>`,
+      // Backward compat
+      sections: {
+        newFeatures: [
+          { title: 'Dark mode support', description: 'Full dark mode theme with system preference detection', ticket: 'FEAT-123' },
+          { title: 'Upload progress indicator', description: 'Real-time progress bar with cancel support', ticket: 'FEAT-124' },
+        ],
+        improvements: [
+          { title: 'Dashboard performance', description: '40% faster initial load with lazy-loaded widgets', ticket: 'PERF-456' },
+        ],
+        bugFixes: [
+          { title: 'SSO login crash', description: 'Fixed crash when OAuth provider returns non-standard token format', ticket: 'BUG-789', severity: 'critical' },
+          { title: 'Currency symbol update', description: 'Currency symbol now updates when user changes region', ticket: 'BUG-790', severity: 'medium' },
+        ],
+        breakingChanges: [
+          { title: 'Removed /api/v1 endpoints', description: 'All v1 API endpoints removed. Migrate to /api/v2.', migration: 'Update base URL, response parsing (.data key), and pagination (meta object)' },
+        ],
+        knownIssues: [
+          { title: 'Safari chart flicker', description: 'Charts may flicker on Safari 17', workaround: 'Use Chrome/Firefox or disable animations in Settings > Accessibility' },
+        ],
+      },
+      markdownOutput: `# Changelog\n\nAll notable changes follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/spec/v2.0.0.html).\n\n## [3.0.0] - ${d}\n\n### Added\n- Dark mode theme with system preference detection (FEAT-123) [UI/Theme]\n- File upload progress indicator with cancel (FEAT-124) [Upload]\n\n### Changed\n- Dashboard lazy-loads widgets — 40% faster (PERF-456) [Dashboard]\n\n### Deprecated\n- /api/v1/webhooks — use /api/v2/webhooks (DEP-010) [API]\n\n### Removed\n- /api/v1/* endpoints — migrate to /api/v2/* (BREAK-001) [API]\n\n### Fixed\n- SSO login crash on non-standard OAuth tokens (BUG-789) [Auth]\n- Currency symbol not updating on region change (BUG-790) [Localization]\n- Search pagination count after filtering (BUG-791) [Search]\n\n### Security\n- Patched XSS in user profile bio (SEC-101) [User Profile]`,
+    });
   }
   if (systemPrompt.includes('principal test data engineer') || systemPrompt.includes('test data')) {
     return JSON.stringify({
