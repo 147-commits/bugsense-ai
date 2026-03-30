@@ -1610,19 +1610,73 @@ FINAL CHECKS before responding:
 // 14. QA CHAT ASSISTANT (existing, enhanced)
 // ═══════════════════════════════════════════════════════════════
 export async function chatAboutBug(bugContext: string, messages: { role: string; content: string }[], userMessage: string) {
-  const systemPrompt = `You are BugSense AI, a senior QA assistant. You help engineers understand bugs, write tests, debug issues, and improve quality processes.
+  const systemPrompt = `You are BugSense AI — a senior QA lead with 10+ years of experience at companies like Google and Microsoft. You have ISTQB Advanced Level certification and deep expertise in enterprise quality engineering.
 
-Context: ${bugContext}
+Bug Context: ${bugContext}
 
-You can help with:
-- Root cause analysis and debugging strategies
-- Test case suggestions and coverage analysis
-- Automation script recommendations
-- Best practices for QA workflows
-- Sprint testing strategies
-- Performance and security testing advice
+YOUR PERSONALITY:
+- Concise, opinionated, technically precise. No filler language.
+- You think systematically: every bug is either a code defect, requirements gap, environment issue, test gap, or process gap. Classify it.
+- You give direct recommendations, not "it depends." If you need more info, ask a specific question.
+- Use markdown formatting: bold for key terms, code blocks for technical content, numbered lists for steps.
 
-Be concise, technical, and actionable. Use code examples when relevant.`;
+YOUR DOMAIN KNOWLEDGE (ISTQB Foundation + Advanced):
+
+TEST PROCESS: Planning → Analysis → Design → Implementation → Execution → Completion
+- When asked about process, reference which phase is relevant and what activities belong there.
+
+TEST DESIGN TECHNIQUES — when suggesting tests, organize by technique:
+- BVA (Boundary Value Analysis): min-1, min, min+1, nominal, max-1, max, max+1
+- EP (Equivalence Partitioning): valid/invalid input classes with representative values
+- Decision Tables: condition combinations → expected actions
+- State Transition: valid/invalid state changes, transition coverage
+- Use Case Testing: main flow + alternative flows + exception flows
+- Error Guessing: common failure modes based on experience
+- Exploratory Testing: charter-based sessions with time-boxing
+
+AGILE TESTING QUADRANTS:
+- Q1 (Technology-facing, supporting team): Unit tests, component tests — fast feedback, dev-owned
+- Q2 (Business-facing, supporting team): Functional tests, BDD — automated acceptance criteria
+- Q3 (Business-facing, critiquing product): Exploratory, UAT — find bugs humans find, not scripts
+- Q4 (Technology-facing, critiquing product): Performance, security, load — requires specialized tooling
+
+ROOT CAUSE ANALYSIS — when asked "why might this occur?":
+1. Walk through investigation STEPS, not just list causes
+2. Use structured methods: 5 Whys (drill from symptom to root), Fishbone/Ishikawa (categorize: People, Process, Technology, Environment), Fault Tree Analysis (work backward from failure)
+3. Always distinguish: Is the root cause in CODE, REQUIREMENTS, ENVIRONMENT, TEST GAP, or PROCESS?
+
+QUALITY METRICS — cite when relevant:
+- Defect Density = defects / KLOC or per feature
+- DRE (Defect Removal Efficiency) = bugs found in testing / (testing + production bugs)
+- Defect Leakage Rate = production bugs / total bugs
+- Test Case Pass Rate = passed / executed
+- MTTR = mean time to resolution by severity
+
+TEST PYRAMID — when recommending test strategy:
+- Ideal ratio: 70% unit, 20% integration, 10% E2E
+- When to break the pyramid: legacy systems without unit test infrastructure, UI-heavy workflows, third-party integration testing
+- Anti-patterns: ice cream cone (too many E2E), hourglass (missing integration layer)
+
+DEBUGGING METHODOLOGY — when helping debug:
+- Binary search / git bisect to find the introducing commit
+- Variable elimination: change one thing at a time
+- Log correlation: match timestamps across client, server, database
+- Reproduction isolation: minimal repro case
+
+QA WORKFLOWS — when advising on process:
+- Sprint testing: shift-left, test during development not after
+- Defect triage: severity vs priority, SLA-based response times
+- Test case review: peer review, traceability to requirements
+- Release testing: regression scope, smoke test, canary deployment verification
+- Regression testing: risk-based selection, not "run everything"
+
+RESPONSE PATTERNS:
+- "What tests should I add?" → Organize by technique (BVA tests, EP tests, negative tests, security tests) with specific examples
+- "Why might this occur?" → Systematic investigation steps, not a list of guesses
+- "How should I debug this?" → Step-by-step debugging methodology
+- "Is this a regression?" → Ask about last known working version, check git bisect approach
+- "How critical is this?" → Assess using severity criteria (user impact, data risk, workaround availability)
+- "Should we release with this bug?" → Risk-based go/no-go framework with evidence`;
 
   if (!AI_API_KEY) {
     return getMockChatResponse(userMessage);
@@ -1735,8 +1789,11 @@ function getMockResponse(systemPrompt: string, _userMessage: string): string {
   }
   if (systemPrompt.includes('test engineer') || systemPrompt.includes('regression test cases')) {
     return JSON.stringify({ testCases: [
-      { title: 'Verify fix resolves reported issue', description: 'Confirm the primary bug is fixed', steps: ['Navigate to affected page', 'Perform triggering action', 'Verify correct behavior'], expectedResult: 'Feature works without error', type: 'regression', priority: 'P1' },
-      { title: 'Edge case: rapid repeated actions', description: 'Test for race conditions', steps: ['Navigate to affected area', 'Rapidly perform triggering action', 'Check for errors'], expectedResult: 'System handles rapid input gracefully', type: 'edge_case', priority: 'P2' },
+      { title: 'Regression: Verify SSO login succeeds after fix', description: 'Confirm the primary fix resolves the OAuth callback crash for enterprise SSO users', steps: ['Navigate to /login', 'Click "Sign in with SSO"', 'Complete Okta authentication', 'Verify redirect to /dashboard with valid session', 'Verify user name displayed in header'], expectedResult: 'User authenticated and redirected to dashboard. No TypeError in console. Session cookie set correctly.', type: 'regression', priority: 'P0' },
+      { title: 'Regression: Verify non-SSO login unaffected', description: 'Ensure the fix does not break email/password login flow', steps: ['Navigate to /login', 'Enter email: qa.tester@company.com', 'Enter password: SecureP@ss123!', 'Click Sign In', 'Verify redirect to /dashboard'], expectedResult: 'Email/password login works identically to pre-fix behavior. No regressions.', type: 'regression', priority: 'P0' },
+      { title: 'Negative: SSO callback with missing email claim', description: 'Verify graceful handling when IdP response lacks email field', steps: ['Configure test IdP to omit email claim', 'Attempt SSO login', 'Observe callback handling'], expectedResult: 'Friendly error message displayed (not white screen). User redirected to /login?error=OAuthCallback.', type: 'negative', priority: 'P1' },
+      { title: 'Edge case: SSO login with very long email (254 chars)', description: 'Test boundary of email field length from IdP response', steps: ['Configure test user with 254-character email', 'Attempt SSO login', 'Verify callback handling and user creation'], expectedResult: 'Login succeeds. User record created with full email. No truncation.', type: 'edge_case', priority: 'P2' },
+      { title: 'Edge case: Rapid SSO login attempts (double-click)', description: 'Test for race conditions when user clicks SSO button multiple times', steps: ['Navigate to /login', 'Rapidly click "Sign in with SSO" 3 times', 'Complete auth once in the IdP', 'Observe callback handling'], expectedResult: 'Only one auth session created. No duplicate user records. No race condition errors.', type: 'edge_case', priority: 'P2' },
     ]});
   }
   if (systemPrompt.includes('principal QA debugging specialist') || systemPrompt.includes('reproduction checklist')) {
@@ -3070,11 +3127,133 @@ export default defineConfig({
 
 function getMockChatResponse(message: string): string {
   const lower = message.toLowerCase();
-  if (lower.includes('why') || lower.includes('cause')) {
-    return "Based on the analysis, this issue likely stems from **insufficient error handling in the OAuth callback flow**. When the identity provider's response format changes, the code attempts to destructure properties that don't exist.\n\nKey investigation areas:\n1. Check the OAuth response schema against expected format\n2. Review recent IdP updates\n3. Look for missing defensive coding patterns";
+
+  if (lower.includes('why') || lower.includes('cause') || lower.includes('root cause')) {
+    return `**Root Cause Investigation — Systematic Approach**
+
+Let me walk through this using the **5 Whys** method:
+
+1. **Why** does the app crash? → TypeError: cannot read 'email' of undefined
+2. **Why** is the user object undefined? → The OAuth callback handler doesn't validate the IdP response before destructuring
+3. **Why** wasn't this validated? → The original code assumed a fixed token schema from the IdP
+4. **Why** did the schema change? → The IdP (Okta) updated their token format, or the app's expected schema was never documented
+5. **Why** wasn't this caught in testing? → **No integration test exists for the OAuth callback with varied response formats** ← root cause
+
+**Classification:** This is a **code defect** (missing input validation) compounded by a **test gap** (no negative tests for the OAuth integration boundary).
+
+**Investigation steps:**
+1. \`git log --oneline lib/auth/authOptions.ts\` — check when the signIn callback last changed
+2. Log the raw IdP response in staging: \`console.log(JSON.stringify(account, null, 2))\`
+3. Compare against the expected schema — is \`user.email\` guaranteed by the OAuth spec, or is it provider-specific?
+4. Check if \`token.email\` in the JWT callback is populated for SSO providers (it may only be set for email/password login)
+
+Would you like me to suggest specific tests to prevent recurrence, or help design the fix?`;
   }
-  if (lower.includes('test') || lower.includes('coverage')) {
-    return "I'd recommend:\n\n**Unit Tests:** Token parsing with valid/invalid/empty responses\n\n**Integration Tests:** Full SSO flow with mock IdP, token refresh scenarios\n\n**E2E Tests:** Happy path SSO login, network interruption during OAuth, expired token handling";
+
+  if (lower.includes('test') || lower.includes('coverage') || lower.includes('what tests')) {
+    return `**Recommended Tests — Organized by Technique**
+
+**BVA (Boundary Value Analysis):**
+- OAuth token with minimum required fields only (just \`sub\` claim)
+- Token with maximum payload size (4KB+ JWT)
+- Token with exactly-expired timestamp (boundary of expiry window)
+
+**Equivalence Partitioning:**
+- Valid class: Standard Okta response with email in \`user.email\`
+- Valid class: Azure AD response with email in \`user.profile.email\`
+- Invalid class: Response with no email field at all
+- Invalid class: Response with email as \`null\`
+- Invalid class: Malformed JSON response
+
+**State Transition Testing:**
+- New user (first SSO login) → should create User record
+- Existing user (repeat login) → should update lastLogin
+- Disabled user → should reject with 403
+- User with changed email in IdP → should handle gracefully
+
+**Error Guessing (experience-based):**
+- IdP returns HTTP 200 but empty body
+- IdP returns valid JSON but wrong content-type header
+- Network timeout during token exchange
+- Clock skew between app server and IdP (JWT \`iat\` in the future)
+
+**Test Pyramid placement:**
+- **Unit (Q1):** Token parsing function with 8-10 input variations — fast, dev-owned
+- **Integration (Q2):** OAuth callback handler with mocked IdP responses — automated in CI
+- **E2E (Q3):** Full SSO flow with Okta sandbox — run in staging only, exploratory session
+
+This covers the critical gap: the OAuth boundary currently has **zero negative tests**.`;
   }
-  return "Based on the analysis, the core issue is in the OAuth integration layer. The crash occurs because the app doesn't handle unexpected response formats gracefully.\n\nWould you like me to dig deeper into the root cause, testing strategy, or fix implementation?";
+
+  if (lower.includes('debug') || lower.includes('how to find') || lower.includes('investigate')) {
+    return `**Debugging Methodology — Variable Elimination**
+
+Start with the binary search approach to isolate the root cause:
+
+1. **Isolate the layer:** Does the bug occur in the IdP response, the callback handler, or the session creation?
+   - Add \`console.log\` at each stage: before \`signIn\`, inside \`jwt\`, inside \`session\`
+   - This tells you exactly where the chain breaks
+
+2. **Eliminate variables one at a time:**
+   | Variable | Test | Result tells you |
+   |----------|------|-----------------|
+   | IdP provider | Try Google OAuth instead of SSO | Is it SSO-specific? |
+   | User account | Try a brand new SSO user | Is it existing-user-specific? |
+   | Browser | Try Firefox/Edge | Is it Chrome-specific? |
+   | Environment | Try staging vs local | Is it env-specific? |
+
+3. **Log correlation:**
+   - Match the client-side TypeError timestamp with server logs
+   - Check: does the server log show the \`signIn\` callback completing, or does it error?
+   - If server succeeds but client crashes → the bug is in the JWT/session callback chain
+
+4. **Git bisect** if this is a regression:
+   \`\`\`bash
+   git bisect start
+   git bisect bad HEAD
+   git bisect good v2.3.0  # last known working version
+   # Test each commit: can you SSO login?
+   \`\`\`
+
+What's your current debugging setup? I can give more specific guidance based on your tooling.`;
+  }
+
+  if (lower.includes('critical') || lower.includes('severity') || lower.includes('priority') || lower.includes('release')) {
+    return `**Severity/Priority Assessment**
+
+**Severity: HIGH** (not Critical, here's why)
+- ✅ Feature is completely broken for a user segment (enterprise SSO)
+- ✅ No inline workaround (users must use email/password, which many enterprise accounts don't have)
+- ❌ No data loss or corruption
+- ❌ Non-SSO users are unaffected
+
+If this caused **data loss** or affected **all users**, it would be Critical.
+
+**Priority: P1 — Fix in current sprint**
+- Enterprise SSO is contractually required for key accounts
+- Support ticket volume is elevated
+- But: it's not P0 (production isn't down for everyone, no data loss active)
+
+**Go/No-Go for release?**
+If you're asking whether to release *other* changes while this is open:
+- ✅ **Go** if the other changes don't touch auth and this bug is pre-existing
+- ❌ **No-Go** if this was introduced by the release candidate
+- Ensure the release notes call out "Known Issue: Enterprise SSO login" with the email/password workaround`;
+  }
+
+  return `This is an **integration boundary defect** — the OAuth callback handler doesn't validate the identity provider's response format before accessing nested properties.
+
+**Quick assessment:**
+- **Root cause category:** Code defect (missing input validation) + Test gap (no negative integration tests)
+- **Impact:** Enterprise SSO users (~35% of user base) completely blocked
+- **Regression?** Likely — check if this worked in the previous release with \`git bisect\`
+
+I can help with:
+- **Root cause deep-dive** → "Why does this occur?"
+- **Test recommendations** → "What tests should I add?"
+- **Debugging strategy** → "How should I debug this?"
+- **Severity assessment** → "How critical is this?"
+- **Fix approach** → "How should this be fixed?"
+
+What would be most useful?`;
 }
