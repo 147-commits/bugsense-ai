@@ -11,7 +11,7 @@ import type { BugReport, TestCase } from '@/types';
 
 interface AnalysisResult {
   bugReport: BugReport;
-  qualityScore: { score: number; breakdown: Record<string, number>; suggestions: string[] };
+  qualityScore: Record<string, unknown>;
   testCases: TestCase[];
   reproductionChecklist: { checklist: string[]; scenarios: { name: string; steps: string[]; expectedOutcome: string }[] };
   duplicates: Record<string, unknown>;

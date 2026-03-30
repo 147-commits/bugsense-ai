@@ -12,7 +12,7 @@ import type { BugReport, TestCase } from '@/types';
 
 interface BugAnalysisCardProps {
   bug: BugReport;
-  qualityScore?: { score: number; breakdown: Record<string, number>; suggestions: string[] };
+  qualityScore?: Record<string, unknown>;
   testCases?: TestCase[];
   reproChecklist?: { checklist: string[]; scenarios: { name: string; steps: string[]; expectedOutcome: string }[] };
   duplicates?: Record<string, unknown>;
@@ -150,30 +150,7 @@ export default function BugAnalysisCard({ bug, qualityScore, testCases, reproChe
         )}
 
         {/* Quality Score */}
-        {qualityScore && (
-          <div className="mt-4 pt-4 border-t border-border">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <Gauge className="w-4 h-4 text-text-muted" />
-                <span className="text-sm font-medium text-text-primary">Report Quality Score</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className={cn('text-2xl font-bold font-mono', getQualityScoreColor(qualityScore.score))}>{qualityScore.score}</span>
-                <span className="text-xs text-text-muted">/ 100</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-5 gap-2">
-              {Object.entries(qualityScore.breakdown).map(([key, val]) => (
-                <div key={key} className="text-center">
-                  <div className="h-1 bg-bg-tertiary rounded-full overflow-hidden mb-1">
-                    <div className={cn('h-full rounded-full', val >= 80 ? 'bg-accent-emerald' : val >= 60 ? 'bg-accent-amber' : 'bg-accent-coral')} style={{ width: `${val}%` }} />
-                  </div>
-                  <span className="text-[10px] text-text-muted capitalize">{key}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {qualityScore && <QualityScoreSection qualityScore={qualityScore} />}
       </div>
 
       {/* ── Steps to Reproduce ───────────────────────────────────────── */}
@@ -597,6 +574,136 @@ export default function BugAnalysisCard({ bug, qualityScore, testCases, reproChe
           {copied ? 'Copied!' : 'Copy'}
         </button>
       </div>
+    </div>
+  );
+}
+
+// ── Quality Score Section ─────────────────────────────────────────────────────
+
+const RATING_COLORS: Record<string, string> = {
+  'Godsend': 'text-accent-emerald bg-accent-emerald/15',
+  'Completionist': 'text-accent-blue bg-accent-blue/15',
+  'Literalist': 'text-accent-amber bg-accent-amber/15',
+  'Novice': 'text-accent-coral bg-accent-coral/15',
+  'Needs Work': 'text-accent-coral bg-accent-coral/15',
+};
+
+function QualityScoreSection({ qualityScore }: { qualityScore: Record<string, unknown> }) {
+  const score = (qualityScore.score as number) ?? 0;
+  const rating = qualityScore.rating as string | undefined;
+  const breakdown = qualityScore.breakdown as Record<string, Record<string, unknown>> | Record<string, number> | undefined;
+  const suggestions = qualityScore.suggestions as Array<Record<string, string>> | string[] | undefined;
+  const strengths = qualityScore.strengths as string[] | undefined;
+  const summary = qualityScore.summary as string | undefined;
+
+  // Detect new format (objects with score/max/percentage) vs old (plain numbers)
+  const isNewFormat = breakdown && typeof Object.values(breakdown)[0] === 'object';
+
+  return (
+    <div className="mt-4 pt-4 border-t border-border">
+      {/* Header with score and rating */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Gauge className="w-4 h-4 text-text-muted" />
+          <span className="text-sm font-medium text-text-primary">Report Quality Score</span>
+          {rating && (
+            <span className={cn('text-[10px] px-2 py-0.5 rounded-md font-bold', RATING_COLORS[rating] || 'bg-bg-tertiary text-text-muted')}>
+              {rating}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={cn('text-2xl font-bold font-mono', getQualityScoreColor(score))}>{score}</span>
+          <span className="text-xs text-text-muted">/ 100</span>
+        </div>
+      </div>
+
+      {/* Summary */}
+      {summary ? <p className="text-xs text-text-secondary mb-3">{summary}</p> : null}
+
+      {/* Dimension Breakdown */}
+      {breakdown && isNewFormat ? (
+        <div className="space-y-2 mb-3">
+          {Object.entries(breakdown as Record<string, Record<string, unknown>>).map(([key, dim]) => {
+            const dimScore = (dim.score as number) ?? 0;
+            const dimMax = (dim.max as number) ?? 100;
+            const dimPct = (dim.percentage as number) ?? Math.round((dimScore / dimMax) * 100);
+            return (
+              <div key={key}>
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className="text-[10px] text-text-muted capitalize">{key}</span>
+                  <span className="text-[10px] font-mono text-text-muted">{dimScore}/{dimMax}</span>
+                </div>
+                <div className="h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
+                  <div
+                    className={cn('h-full rounded-full transition-all', dimPct >= 70 ? 'bg-accent-emerald' : dimPct >= 50 ? 'bg-accent-amber' : 'bg-accent-coral')}
+                    style={{ width: `${dimPct}%` }}
+                  />
+                </div>
+                {dim.details ? <p className="text-[10px] text-text-muted mt-0.5">{dim.details as string}</p> : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : breakdown ? (
+        /* Old format: plain number breakdown */
+        <div className="grid grid-cols-5 gap-2 mb-3">
+          {Object.entries(breakdown as Record<string, number>).map(([key, val]) => (
+            <div key={key} className="text-center">
+              <div className="h-1 bg-bg-tertiary rounded-full overflow-hidden mb-1">
+                <div className={cn('h-full rounded-full', val >= 80 ? 'bg-accent-emerald' : val >= 60 ? 'bg-accent-amber' : 'bg-accent-coral')} style={{ width: `${val}%` }} />
+              </div>
+              <span className="text-[10px] text-text-muted capitalize">{key}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {/* Strengths */}
+      {strengths && strengths.length > 0 ? (
+        <div className="mb-3">
+          <span className="text-[10px] font-semibold text-accent-emerald uppercase tracking-wider">Strengths</span>
+          <div className="mt-1 space-y-0.5">
+            {strengths.map((s, i) => (
+              <div key={i} className="flex items-start gap-1.5">
+                <CheckCircle2 className="w-3 h-3 text-accent-emerald mt-0.5 flex-shrink-0" />
+                <span className="text-[10px] text-text-secondary">{s}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Suggestions */}
+      {suggestions && suggestions.length > 0 ? (
+        <div>
+          <span className="text-[10px] font-semibold text-accent-amber uppercase tracking-wider">Improvement Suggestions</span>
+          <div className="mt-1 space-y-1">
+            {suggestions.map((s, i) => {
+              if (typeof s === 'string') {
+                return <p key={i} className="text-[10px] text-text-muted">• {s}</p>;
+              }
+              const sug = s as Record<string, string>;
+              return (
+                <div key={i} className="p-2 rounded-lg bg-bg-tertiary">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <span className="text-[10px] capitalize text-text-muted">{sug.dimension}</span>
+                    {sug.priority ? (
+                      <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium',
+                        sug.priority === 'High' ? 'bg-accent-coral/15 text-accent-coral' :
+                        sug.priority === 'Medium' ? 'bg-accent-amber/15 text-accent-amber' :
+                        'bg-accent-emerald/15 text-accent-emerald'
+                      )}>{sug.priority}</span>
+                    ) : null}
+                    {sug.impact ? <span className="text-[10px] text-accent-emerald ml-auto">{sug.impact}</span> : null}
+                  </div>
+                  <p className="text-[10px] text-text-secondary">{sug.suggestion}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -302,18 +302,90 @@ Return ONLY valid JSON with this exact structure:
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 2. QUALITY SCORE (existing)
+// 2. QUALITY SCORE — Enterprise 100-Point Weighted Rubric
 // ═══════════════════════════════════════════════════════════════
 export async function calculateQualityScore(bugReport: Record<string, unknown>) {
-  const systemPrompt = `You are a QA quality evaluator. Score the bug report on a 0-100 scale.
+  const systemPrompt = `You are a principal QA quality auditor evaluating bug report quality using a weighted 100-point enterprise rubric. Score STRICTLY based on what is present in the report — do not give credit for information that is not included.
+
+SCORING RUBRIC — these 6 dimensions MUST add up to the total score (max 100):
+
+1. IDENTIFICATION (max 10 pts):
+   - Specific, descriptive title following [Component] - [Action] - [Result] pattern (3 pts)
+   - Correct component/module identified (2 pts)
+   - App version / build number included (2 pts)
+   - Issue type classified (bug/regression/enhancement) (1 pt)
+   - Defect ID or reference number (1 pt)
+   - Regression flag (is this a regression from previous version?) (1 pt)
+
+2. CLASSIFICATION (max 15 pts):
+   - Severity with written justification (not just "HIGH") (4 pts)
+   - Priority with business context reasoning (3 pts)
+   - Root cause category identified (Coding Error/Requirements Gap/etc.) (3 pts)
+   - Impact radius described (which users, which features) (3 pts)
+   - Regression flag with version where it last worked (2 pts)
+
+3. REPRODUCTION (max 30 pts — most important):
+   - Steps start from a known, documented starting state (4 pts)
+   - Discrete, numbered steps (not a paragraph) (4 pts)
+   - Exact input values specified (not "enter valid data") (5 pts)
+   - Specific expected result documented (4 pts)
+   - Specific actual result documented (with exact error messages) (5 pts)
+   - Reproducibility rate stated (Always/Intermittent with frequency/Rare) (3 pts)
+   - Environment-specific reproduction notes (3 pts)
+   - Negative space: conditions where bug does NOT reproduce (2 pts)
+
+4. ENVIRONMENT (max 15 pts):
+   - OS name and version (3 pts)
+   - Browser name and version (3 pts)
+   - App version / build number / commit hash (3 pts)
+   - Test data used (specific values, not "test data") (3 pts)
+   - Network conditions noted (if relevant) (2 pts)
+   - Device / resolution (if relevant) (1 pt)
+
+5. EVIDENCE (max 15 pts):
+   - Screenshots included (3 pts) — annotated with arrows/highlights (+2 pts bonus within cap)
+   - Error logs / console output (3 pts)
+   - Stack trace (if applicable) (3 pts)
+   - Video recording (2 pts)
+   - HAR file / network trace (2 pts)
+   - References to related bugs/tickets (2 pts)
+
+6. ANALYSIS (max 15 pts):
+   - Root cause hypothesis with confidence level (4 pts)
+   - Isolation work described (what was tested to narrow down the cause) (3 pts)
+   - Workaround documented (if available) (3 pts)
+   - Business impact quantified (affected users %, revenue impact, SLA risk) (3 pts)
+   - Fix suggestion with estimated effort (2 pts)
+
+QUALITY RATINGS (based on total score):
+- Godsend (90-100): Exceptional — ready for immediate engineering triage. Contains all information needed to reproduce, diagnose, and fix.
+- Completionist (75-89): Thorough — minor gaps that don't block triage. Good quality.
+- Literalist (60-74): Adequate — has the basics but missing context that would speed up resolution.
+- Novice (40-59): Below standard — missing critical information. Needs significant improvement.
+- Needs Work (0-39): Insufficient — cannot be triaged without major clarification.
+
+IMPROVEMENT SUGGESTIONS: For EACH dimension scoring below 70% of its max, provide a SPECIFIC, ACTIONABLE suggestion. Not "add more detail" but "Include the browser version (e.g., Chrome 120.0.6099.130) in the environment section."
+
 Return ONLY valid JSON:
 {
-  "score": 85,
-  "breakdown": { "clarity": 90, "reproducibility": 80, "completeness": 85, "technicalDetail": 80, "actionability": 90 },
-  "suggestions": ["Suggestion to improve the report"]
+  "score": 0,
+  "rating": "Godsend|Completionist|Literalist|Novice|Needs Work",
+  "breakdown": {
+    "identification": { "score": 0, "max": 10, "percentage": 0, "details": "What was found / what was missing" },
+    "classification": { "score": 0, "max": 15, "percentage": 0, "details": "What was found / what was missing" },
+    "reproduction": { "score": 0, "max": 30, "percentage": 0, "details": "What was found / what was missing" },
+    "environment": { "score": 0, "max": 15, "percentage": 0, "details": "What was found / what was missing" },
+    "evidence": { "score": 0, "max": 15, "percentage": 0, "details": "What was found / what was missing" },
+    "analysis": { "score": 0, "max": 15, "percentage": 0, "details": "What was found / what was missing" }
+  },
+  "suggestions": [
+    { "dimension": "reproduction", "priority": "High|Medium|Low", "suggestion": "Specific actionable improvement", "impact": "How many points this could add" }
+  ],
+  "strengths": ["What the report does well — acknowledge good practices"],
+  "summary": "One-sentence overall assessment"
 }`;
 
-  const response = await callAI(systemPrompt, JSON.stringify(bugReport));
+  const response = await callAI(systemPrompt, `Bug Report to Evaluate:\n${JSON.stringify(bugReport, null, 2)}`);
   return extractJSON(response);
 }
 
@@ -1570,8 +1642,31 @@ export function formatForGitHub(bug: Record<string, unknown>) {
 // MOCK RESPONSES (Demo Mode)
 // ═══════════════════════════════════════════════════════════════
 function getMockResponse(systemPrompt: string, _userMessage: string): string {
-  if (systemPrompt.includes('quality evaluator')) {
-    return JSON.stringify({ score: 78, breakdown: { clarity: 82, reproducibility: 75, completeness: 80, technicalDetail: 70, actionability: 83 }, suggestions: ['Add browser version', 'Include network conditions', 'Add timestamps'] });
+  if (systemPrompt.includes('principal QA quality auditor') || systemPrompt.includes('quality evaluator')) {
+    return JSON.stringify({
+      score: 72,
+      rating: 'Literalist',
+      breakdown: {
+        identification: { score: 7, max: 10, percentage: 70, details: 'Good title with component name. Missing app version/build number and regression flag.' },
+        classification: { score: 11, max: 15, percentage: 73, details: 'Severity and priority present with some justification. Missing root cause category and impact radius quantification.' },
+        reproduction: { score: 22, max: 30, percentage: 73, details: 'Numbered steps from a clear starting state. Missing exact input values (says "valid credentials" instead of specific email/password). No reproducibility rate stated.' },
+        environment: { score: 9, max: 15, percentage: 60, details: 'OS and browser mentioned. Missing exact versions, no test data values, no network conditions.' },
+        evidence: { score: 8, max: 15, percentage: 53, details: 'Error message included in actual result. No screenshots, no logs, no stack trace, no HAR file.' },
+        analysis: { score: 15, max: 15, percentage: 100, details: 'Excellent root cause hypothesis with confidence levels. Workaround documented. Business impact quantified with user segment and revenue impact.' },
+      },
+      suggestions: [
+        { dimension: 'environment', priority: 'High', suggestion: 'Include exact browser version (e.g., "Chrome 120.0.6099.130") instead of just "Chrome". Add OS version (e.g., "Windows 11 23H2" not just "Windows").', impact: '+3 points' },
+        { dimension: 'reproduction', priority: 'High', suggestion: 'Replace "enter valid credentials" with specific test values: email "qa.tester@company.com", password "TestPass123!". Add reproducibility rate: "Reproduces 5/5 attempts on Chrome, 0/5 on Firefox".', impact: '+5 points' },
+        { dimension: 'evidence', priority: 'Medium', suggestion: 'Attach an annotated screenshot showing the error state. Include the browser console output (right-click → Inspect → Console tab). If a stack trace is visible, copy it verbatim.', impact: '+5 points' },
+        { dimension: 'identification', priority: 'Low', suggestion: 'Add the app version or build number (e.g., "v2.4.1, build #1847"). Add a regression flag: "Regression: Yes — worked in v2.3.x, broken since v2.4.0".', impact: '+3 points' },
+      ],
+      strengths: [
+        'Root cause analysis is exceptional — multiple hypotheses with confidence levels',
+        'Business impact is well quantified with specific user segment and revenue figures',
+        'Steps to reproduce are numbered and sequential (not a paragraph)',
+      ],
+      summary: 'Adequate report with strong analysis section but missing specific reproduction values, exact environment versions, and supporting evidence (screenshots/logs). Adding these would elevate it to Completionist level.',
+    });
   }
   if (systemPrompt.includes('principal QA engineer performing enterprise-grade duplicate') || systemPrompt.includes('duplicate bug detector')) {
     return JSON.stringify({
