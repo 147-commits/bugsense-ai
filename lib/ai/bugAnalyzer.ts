@@ -480,17 +480,75 @@ Generate 3-5 comprehensive test cases.`;
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 5. REPRODUCTION CHECKLIST (existing)
+// 5. REPRODUCTION CHECKLIST — Four-Phase Debugging Framework
 // ═══════════════════════════════════════════════════════════════
 export async function generateReproductionChecklist(bugReport: Record<string, unknown>) {
-  const systemPrompt = `You are a QA engineer. Generate a detailed reproduction checklist.
+  const systemPrompt = `You are a principal QA debugging specialist. Generate a systematic four-phase reproduction and debugging checklist following enterprise debugging methodology.
+
+PHASE 1 — ENVIRONMENT SETUP CHECKLIST:
+Generate a checklist of environment conditions to verify BEFORE attempting reproduction. Each item has: checked (false), item description, value (what to set/verify), status placeholder.
+Must include: OS + version, Browser + version, App version/build, Auth state and user role, Feature flags (if any mentioned), Network conditions, Locale/timezone, Database state, Third-party service availability, Cache/cookies state.
+
+PHASE 2 — REPRODUCTION STEPS:
+Generate structured steps with FOUR columns per step:
+- step: The numbered action to perform
+- expectedResult: What SHOULD happen at this step
+- actualResult: What ACTUALLY happens (the bug behavior)
+- evidenceNeeded: What evidence to capture (screenshot, console log, HAR export, etc.)
+Start from a KNOWN state. Each step must be discrete and specific.
+
+PHASE 3 — ISOLATION MATRIX:
+Generate a variable elimination table to help narrow down the exact trigger:
+- variable: What to change (browser, user role, data set, network, feature flag, etc.)
+- valueTested: The specific value to test
+- reproducible: null (to be filled in during testing — true/false/unknown)
+- notes: What this test would prove or disprove
+Use binary search approach: change one variable at a time to isolate the root cause.
+
+PHASE 4 — EVIDENCE COLLECTION CHECKLIST:
+Generate a checklist of evidence to gather:
+- Console logs (with specific error text to look for)
+- Network tab / HAR export (with specific requests to watch)
+- Server logs (with timestamp range and log level)
+- Screenshot of error state (annotated)
+- Video recording of reproduction
+- Stack trace (if visible)
+- Database state query (specific table/record to check)
+- Performance metrics (if relevant)
+
+ALSO INCLUDE:
+- minimalReproduction: The fewest possible steps to reproduce (stripped of unnecessary actions)
+- reproductionResult: "Always" | "Intermittent (X out of Y attempts)" | "Not Reproduced"
+- crossEnvironment: Table of environments tested: environment, tested (true/false), reproducible (true/false/unknown), notes
+
 Return ONLY valid JSON:
 {
-  "checklist": ["Step-by-step item"],
-  "scenarios": [{ "name": "Scenario name", "steps": ["Step 1"], "expectedOutcome": "What should happen" }]
+  "phase1_environment": [
+    { "checked": false, "item": "Operating System", "value": "Windows 11 23H2 (or as specified in report)", "status": "pending" }
+  ],
+  "phase2_reproductionSteps": [
+    { "step": "1. Navigate to /login", "expectedResult": "Login page loads with email and password fields", "actualResult": "Login page loads correctly (no issue at this step)", "evidenceNeeded": "Screenshot of login page" }
+  ],
+  "phase3_isolationMatrix": [
+    { "variable": "Browser", "valueTested": "Firefox 121 (instead of Chrome 120)", "reproducible": null, "notes": "Determines if this is browser-specific" }
+  ],
+  "phase4_evidenceChecklist": [
+    { "checked": false, "item": "Browser console logs", "details": "Open DevTools → Console tab before reproducing. Look for TypeError or unhandled promise rejection.", "priority": "High" }
+  ],
+  "minimalReproduction": {
+    "steps": ["Fewest steps to reproduce"],
+    "preconditions": "State required before starting",
+    "estimatedTime": "2 minutes"
+  },
+  "reproductionResult": "Always|Intermittent (X/Y)|Not Reproduced",
+  "crossEnvironment": [
+    { "environment": "Chrome 120 / Windows 11", "tested": false, "reproducible": null, "notes": "Primary reported environment" }
+  ],
+  "checklist": ["Legacy format: combined checklist items for backward compatibility"],
+  "scenarios": [{ "name": "Scenario name", "steps": ["Step"], "expectedOutcome": "Expected" }]
 }`;
 
-  const response = await callAI(systemPrompt, JSON.stringify(bugReport));
+  const response = await callAI(systemPrompt, `Bug Report:\n${JSON.stringify(bugReport, null, 2)}`);
   return extractJSON(response);
 }
 
@@ -1681,8 +1739,55 @@ function getMockResponse(systemPrompt: string, _userMessage: string): string {
       { title: 'Edge case: rapid repeated actions', description: 'Test for race conditions', steps: ['Navigate to affected area', 'Rapidly perform triggering action', 'Check for errors'], expectedResult: 'System handles rapid input gracefully', type: 'edge_case', priority: 'P2' },
     ]});
   }
-  if (systemPrompt.includes('reproduction checklist')) {
-    return JSON.stringify({ checklist: ['Clear browser cache', 'Use incognito window', 'Verify correct environment', 'Check network', 'Document timestamps'], scenarios: [{ name: 'Standard reproduction', steps: ['Follow reported steps exactly', 'Note deviations', 'Capture screenshots'], expectedOutcome: 'Bug should be reproducible' }] });
+  if (systemPrompt.includes('principal QA debugging specialist') || systemPrompt.includes('reproduction checklist')) {
+    return JSON.stringify({
+      phase1_environment: [
+        { checked: false, item: 'Operating System', value: 'Windows 11 23H2', status: 'pending' },
+        { checked: false, item: 'Browser', value: 'Chrome 120.0.6099.130', status: 'pending' },
+        { checked: false, item: 'App Version', value: 'v2.4.1 (build #1847)', status: 'pending' },
+        { checked: false, item: 'Auth State', value: 'Authenticated as enterprise SSO user (Okta)', status: 'pending' },
+        { checked: false, item: 'Network', value: 'Corporate network (no proxy)', status: 'pending' },
+        { checked: false, item: 'Cache/Cookies', value: 'Clear all cookies and cache before testing', status: 'pending' },
+        { checked: false, item: 'Feature Flags', value: 'SSO_V2_ENABLED=true', status: 'pending' },
+      ],
+      phase2_reproductionSteps: [
+        { step: '1. Navigate to /login', expectedResult: 'Login page with SSO button visible', actualResult: 'Login page loads correctly', evidenceNeeded: 'Screenshot of login page' },
+        { step: '2. Click "Sign in with SSO"', expectedResult: 'Redirect to Okta IdP login page', actualResult: 'Redirect works correctly', evidenceNeeded: 'Network tab: verify redirect URL' },
+        { step: '3. Complete Okta authentication', expectedResult: 'Redirect back to /api/auth/callback/sso with 200', actualResult: 'Redirect returns to callback URL', evidenceNeeded: 'HAR export of callback request' },
+        { step: '4. Observe callback handling', expectedResult: 'Session created, redirect to /dashboard', actualResult: 'WHITE SCREEN — TypeError in console', evidenceNeeded: 'Console error screenshot + full stack trace' },
+      ],
+      phase3_isolationMatrix: [
+        { variable: 'Browser', valueTested: 'Firefox 121', reproducible: null, notes: 'Tests if Chrome-specific. Reporter confirmed also fails on Firefox.' },
+        { variable: 'SSO Provider', valueTested: 'Azure AD (instead of Okta)', reproducible: null, notes: 'Tests if Okta-specific or all SSO providers.' },
+        { variable: 'Auth Method', valueTested: 'Email/password login', reproducible: null, notes: 'If email/password works, narrows to SSO callback handling.' },
+        { variable: 'User Account', valueTested: 'New SSO user (first login)', reproducible: null, notes: 'Tests if existing user lookup is the issue.' },
+        { variable: 'Feature Flag', valueTested: 'SSO_V2_ENABLED=false', reproducible: null, notes: 'Tests if new SSO v2 code path is the cause.' },
+        { variable: 'Network', valueTested: 'Home network (no corporate proxy)', reproducible: null, notes: 'Eliminates proxy/firewall as cause.' },
+      ],
+      phase4_evidenceChecklist: [
+        { checked: false, item: 'Browser console logs', details: 'Open DevTools Console BEFORE clicking SSO. Look for: TypeError, "Cannot read properties of undefined"', priority: 'High' },
+        { checked: false, item: 'Network tab (HAR export)', details: 'Record from SSO click through callback. Export HAR file. Check /api/auth/callback/sso response body.', priority: 'High' },
+        { checked: false, item: 'Server logs', details: 'Check server logs for timestamp range of the callback request. Look for unhandled exceptions in auth middleware.', priority: 'High' },
+        { checked: false, item: 'Screenshot of error', details: 'Capture the white screen AND the console error. Annotate with arrows.', priority: 'Medium' },
+        { checked: false, item: 'OAuth token response', details: 'Log the raw token response from the IdP. Compare structure against expected schema.', priority: 'High' },
+        { checked: false, item: 'Database state', details: 'Query: SELECT * FROM "User" WHERE email = \'sso-user@company.com\'. Verify user record exists after SSO attempt.', priority: 'Medium' },
+      ],
+      minimalReproduction: {
+        steps: ['1. Go to /login', '2. Click SSO login', '3. Complete Okta auth', '4. Observe white screen on callback'],
+        preconditions: 'Clean browser state, enterprise SSO account (Okta), app v2.4.1',
+        estimatedTime: '2 minutes',
+      },
+      reproductionResult: 'Always (5/5 attempts on Chrome, 5/5 on Firefox)',
+      crossEnvironment: [
+        { environment: 'Chrome 120 / Windows 11', tested: true, reproducible: true, notes: 'Primary reported environment — confirmed' },
+        { environment: 'Firefox 121 / Windows 11', tested: true, reproducible: true, notes: 'Also reproduces — not Chrome-specific' },
+        { environment: 'Chrome 120 / macOS 14', tested: false, reproducible: null, notes: 'Not yet tested — would determine if OS-specific' },
+        { environment: 'Mobile Safari / iOS 17', tested: false, reproducible: null, notes: 'Mobile app uses different auth flow — likely unaffected' },
+      ],
+      // Backward compatibility
+      checklist: ['Verify OS: Windows 11 23H2', 'Verify browser: Chrome 120', 'Clear cache and cookies', 'Use enterprise SSO account', 'Open DevTools Console before starting', 'Record HAR file during SSO flow', 'Capture screenshot of white screen + console error'],
+      scenarios: [{ name: 'Standard SSO Reproduction', steps: ['Navigate to /login', 'Click SSO login', 'Complete Okta auth', 'Observe white screen'], expectedOutcome: 'Should redirect to /dashboard with valid session' }],
+    });
   }
   if (systemPrompt.includes('principal QA architect') || systemPrompt.includes('comprehensive test cases from user stories')) {
     return JSON.stringify({

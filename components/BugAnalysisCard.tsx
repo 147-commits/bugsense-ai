@@ -14,7 +14,7 @@ interface BugAnalysisCardProps {
   bug: BugReport;
   qualityScore?: Record<string, unknown>;
   testCases?: TestCase[];
-  reproChecklist?: { checklist: string[]; scenarios: { name: string; steps: string[]; expectedOutcome: string }[] };
+  reproChecklist?: Record<string, unknown>;
   duplicates?: Record<string, unknown>;
 }
 
@@ -524,39 +524,7 @@ export default function BugAnalysisCard({ bug, qualityScore, testCases, reproChe
       )}
 
       {/* ── Reproduction Checklist ───────────────────────────────────── */}
-      {reproChecklist && (
-        <div className="glass-panel px-6 divide-y divide-border">
-          <SectionHeader id="checklist" icon={ClipboardCheck} title="Reproduction Checklist" badge={`${reproChecklist.checklist.length} items`} />
-          {expandedSections.checklist && (
-            <div className="py-4 space-y-4">
-              <div className="space-y-2">
-                {reproChecklist.checklist.map((item, i) => (
-                  <label key={i} className="flex items-start gap-3 p-2 rounded-lg hover:bg-bg-tertiary cursor-pointer group transition-colors">
-                    <input type="checkbox" className="mt-1 rounded border-border accent-accent-blue" />
-                    <span className="text-sm text-text-secondary group-hover:text-text-primary transition-colors">{item}</span>
-                  </label>
-                ))}
-              </div>
-              {reproChecklist.scenarios.length > 0 && (
-                <div>
-                  <span className="text-xs font-medium text-text-muted uppercase tracking-wider">Reproduction Scenarios</span>
-                  <div className="mt-2 space-y-2">
-                    {reproChecklist.scenarios.map((sc, i) => (
-                      <div key={i} className="p-3 rounded-xl bg-bg-tertiary">
-                        <h5 className="text-sm font-medium text-text-primary mb-1">{sc.name}</h5>
-                        {sc.steps.map((step, j) => (
-                          <p key={j} className="text-xs text-text-secondary ml-3">• {step}</p>
-                        ))}
-                        <p className="text-xs text-accent-emerald mt-1">Expected: {sc.expectedOutcome}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      {reproChecklist && <ReproductionChecklistSection data={reproChecklist} expanded={expandedSections.checklist} onToggle={() => toggleSection('checklist')} />}
 
       {/* ── Duplicate Detection ──────────────────────────────────────── */}
       <DuplicateSection duplicates={duplicates} />
@@ -702,6 +670,224 @@ function QualityScoreSection({ qualityScore }: { qualityScore: Record<string, un
               );
             })}
           </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// ── Reproduction Checklist Section ────────────────────────────────────────────
+
+function ReproductionChecklistSection({ data, expanded, onToggle }: { data: Record<string, unknown>; expanded: boolean; onToggle: () => void }) {
+  const phase1 = Array.isArray(data.phase1_environment) ? data.phase1_environment as Array<Record<string, string>> : [];
+  const phase2 = Array.isArray(data.phase2_reproductionSteps) ? data.phase2_reproductionSteps as Array<Record<string, string>> : [];
+  const phase3 = Array.isArray(data.phase3_isolationMatrix) ? data.phase3_isolationMatrix as Array<Record<string, unknown>> : [];
+  const phase4 = Array.isArray(data.phase4_evidenceChecklist) ? data.phase4_evidenceChecklist as Array<Record<string, string>> : [];
+  const minimal = data.minimalReproduction as Record<string, unknown> | undefined;
+  const reproResult = data.reproductionResult as string | undefined;
+  const crossEnv = Array.isArray(data.crossEnvironment) ? data.crossEnvironment as Array<Record<string, unknown>> : [];
+  // Legacy
+  const legacyChecklist = Array.isArray(data.checklist) ? data.checklist as string[] : [];
+  const legacyScenarios = Array.isArray(data.scenarios) ? data.scenarios as Array<Record<string, unknown>> : [];
+
+  const hasNewFormat = phase1.length > 0 || phase2.length > 0;
+  const totalItems = phase1.length + phase2.length + phase3.length + phase4.length || legacyChecklist.length;
+
+  return (
+    <div className="glass-panel px-6 divide-y divide-border">
+      <button onClick={onToggle} className="w-full flex items-center gap-3 py-3 text-left group">
+        <div className="w-8 h-8 rounded-lg bg-accent-cyan/10 flex items-center justify-center group-hover:bg-bg-hover transition-colors">
+          <ClipboardCheck className="w-4 h-4 text-accent-cyan" />
+        </div>
+        <span className="text-sm font-semibold text-text-primary flex-1">Reproduction Checklist</span>
+        <span className="text-xs text-text-muted bg-bg-tertiary px-2 py-0.5 rounded-full">{totalItems} items</span>
+        {expanded ? <ChevronDown className="w-4 h-4 text-text-muted" /> : <ChevronRight className="w-4 h-4 text-text-muted" />}
+      </button>
+
+      {expanded && hasNewFormat ? (
+        <div className="py-4 space-y-5">
+          {/* Phase 1: Environment */}
+          {phase1.length > 0 && (
+            <div>
+              <span className="text-[10px] font-semibold text-accent-blue uppercase tracking-wider">Phase 1 — Environment Setup</span>
+              <div className="mt-2 space-y-1.5">
+                {phase1.map((item, i) => (
+                  <label key={i} className="flex items-center gap-3 p-2 rounded-lg hover:bg-bg-tertiary cursor-pointer group transition-colors">
+                    <input type="checkbox" className="rounded border-border accent-accent-blue" />
+                    <span className="text-xs text-text-primary font-medium w-32 flex-shrink-0">{item.item}</span>
+                    <span className="text-xs text-text-secondary font-mono">{item.value}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Phase 2: Reproduction Steps */}
+          {phase2.length > 0 && (
+            <div>
+              <span className="text-[10px] font-semibold text-accent-emerald uppercase tracking-wider">Phase 2 — Reproduction Steps</span>
+              <div className="mt-2 overflow-x-auto">
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-1.5 px-2 text-text-muted font-medium">Step</th>
+                      <th className="text-left py-1.5 px-2 text-accent-emerald font-medium">Expected</th>
+                      <th className="text-left py-1.5 px-2 text-accent-coral font-medium">Actual</th>
+                      <th className="text-left py-1.5 px-2 text-text-muted font-medium">Evidence</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {phase2.map((row, i) => (
+                      <tr key={i} className="border-b border-border/50">
+                        <td className="py-1.5 px-2 text-text-primary">{row.step}</td>
+                        <td className="py-1.5 px-2 text-text-secondary">{row.expectedResult}</td>
+                        <td className="py-1.5 px-2 text-text-secondary">{row.actualResult}</td>
+                        <td className="py-1.5 px-2 text-text-muted text-[10px]">{row.evidenceNeeded}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Phase 3: Isolation Matrix */}
+          {phase3.length > 0 && (
+            <div>
+              <span className="text-[10px] font-semibold text-accent-amber uppercase tracking-wider">Phase 3 — Isolation Matrix</span>
+              <div className="mt-2 overflow-x-auto">
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-1.5 px-2 text-text-muted font-medium">Variable</th>
+                      <th className="text-left py-1.5 px-2 text-text-muted font-medium">Value Tested</th>
+                      <th className="text-center py-1.5 px-2 text-text-muted font-medium">Reproduces?</th>
+                      <th className="text-left py-1.5 px-2 text-text-muted font-medium">Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {phase3.map((row, i) => (
+                      <tr key={i} className="border-b border-border/50">
+                        <td className="py-1.5 px-2 text-text-primary font-medium">{row.variable as string}</td>
+                        <td className="py-1.5 px-2 text-text-secondary font-mono">{row.valueTested as string}</td>
+                        <td className="py-1.5 px-2 text-center">
+                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-bg-tertiary text-text-muted">
+                            {row.reproducible === true ? '✓ Yes' : row.reproducible === false ? '✗ No' : '— Pending'}
+                          </span>
+                        </td>
+                        <td className="py-1.5 px-2 text-text-muted">{row.notes as string}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Phase 4: Evidence Collection */}
+          {phase4.length > 0 && (
+            <div>
+              <span className="text-[10px] font-semibold text-accent-violet uppercase tracking-wider">Phase 4 — Evidence Collection</span>
+              <div className="mt-2 space-y-1.5">
+                {phase4.map((item, i) => (
+                  <label key={i} className="flex items-start gap-3 p-2 rounded-lg hover:bg-bg-tertiary cursor-pointer group transition-colors">
+                    <input type="checkbox" className="mt-0.5 rounded border-border accent-accent-violet" />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-text-primary font-medium">{item.item}</span>
+                        {item.priority ? (
+                          <span className={cn('text-[10px] px-1.5 py-0.5 rounded font-medium',
+                            item.priority === 'High' ? 'bg-accent-coral/15 text-accent-coral' : 'bg-accent-amber/15 text-accent-amber'
+                          )}>{item.priority}</span>
+                        ) : null}
+                      </div>
+                      <p className="text-[10px] text-text-muted mt-0.5">{item.details}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Minimal Reproduction */}
+          {minimal && (
+            <div className="p-3 rounded-xl bg-accent-blue/5 border border-accent-blue/10">
+              <span className="text-[10px] font-semibold text-accent-blue uppercase tracking-wider">Minimal Reproduction Case</span>
+              <p className="text-[10px] text-text-muted mt-0.5 mb-1">Preconditions: {minimal.preconditions as string} | Est. time: {minimal.estimatedTime as string}</p>
+              <div className="space-y-0.5">
+                {(minimal.steps as string[])?.map((step, i) => (
+                  <p key={i} className="text-xs text-text-secondary">{step}</p>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Reproduction Result */}
+          {reproResult ? (
+            <div className="p-3 rounded-xl bg-bg-tertiary">
+              <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Reproduction Result</span>
+              <p className="text-sm text-text-primary font-medium mt-0.5">{reproResult}</p>
+            </div>
+          ) : null}
+
+          {/* Cross-Environment */}
+          {crossEnv.length > 0 && (
+            <div>
+              <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Cross-Environment Verification</span>
+              <div className="mt-1.5 overflow-x-auto">
+                <table className="w-full text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-1.5 px-2 text-text-muted font-medium">Environment</th>
+                      <th className="text-center py-1.5 px-2 text-text-muted font-medium">Tested</th>
+                      <th className="text-center py-1.5 px-2 text-text-muted font-medium">Reproduces</th>
+                      <th className="text-left py-1.5 px-2 text-text-muted font-medium">Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {crossEnv.map((env, i) => (
+                      <tr key={i} className="border-b border-border/50">
+                        <td className="py-1.5 px-2 text-text-primary">{env.environment as string}</td>
+                        <td className="py-1.5 px-2 text-center">{env.tested ? '✓' : '—'}</td>
+                        <td className="py-1.5 px-2 text-center">
+                          {env.reproducible === true ? <span className="text-accent-coral">✓ Yes</span> : env.reproducible === false ? <span className="text-accent-emerald">✗ No</span> : <span className="text-text-muted">—</span>}
+                        </td>
+                        <td className="py-1.5 px-2 text-text-muted">{env.notes as string}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : expanded ? (
+        /* Legacy format fallback */
+        <div className="py-4 space-y-4">
+          <div className="space-y-2">
+            {legacyChecklist.map((item, i) => (
+              <label key={i} className="flex items-start gap-3 p-2 rounded-lg hover:bg-bg-tertiary cursor-pointer group transition-colors">
+                <input type="checkbox" className="mt-1 rounded border-border accent-accent-blue" />
+                <span className="text-sm text-text-secondary group-hover:text-text-primary transition-colors">{item}</span>
+              </label>
+            ))}
+          </div>
+          {legacyScenarios.length > 0 && (
+            <div>
+              <span className="text-xs font-medium text-text-muted uppercase tracking-wider">Reproduction Scenarios</span>
+              <div className="mt-2 space-y-2">
+                {legacyScenarios.map((sc, i) => (
+                  <div key={i} className="p-3 rounded-xl bg-bg-tertiary">
+                    <h5 className="text-sm font-medium text-text-primary mb-1">{sc.name as string}</h5>
+                    {(sc.steps as string[])?.map((step, j) => (
+                      <p key={j} className="text-xs text-text-secondary ml-3">• {step}</p>
+                    ))}
+                    <p className="text-xs text-accent-emerald mt-1">Expected: {sc.expectedOutcome as string}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       ) : null}
     </div>
