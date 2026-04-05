@@ -8,12 +8,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { sidebarOpen } = useAppStore();
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-bg-primary">
       <Sidebar />
       <main
         className={cn(
-          'flex-1 overflow-y-auto transition-all duration-300',
-          sidebarOpen ? 'ml-[240px]' : 'ml-[72px]'
+          'flex-1 overflow-y-auto transition-all duration-200',
+          sidebarOpen ? 'ml-[220px]' : 'ml-[60px]'
         )}
       >
         {children}

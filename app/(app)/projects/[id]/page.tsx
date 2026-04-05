@@ -198,13 +198,11 @@ export default function ProjectDetailPage() {
 
       <div className="p-6 max-w-[1200px] mx-auto space-y-6">
         {/* ── Header ──────────────────────────────────────────────────────── */}
-        <div className="glass-panel gradient-border p-6 relative overflow-hidden">
-          <div className="absolute inset-0 dot-pattern opacity-30" />
-          <div className="relative z-10">
+        <div className="glass-panel p-6">
             <div className="flex items-start justify-between gap-4 mb-4">
               <div className="flex items-center gap-4 min-w-0">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-accent-blue/20 to-accent-violet/20 flex items-center justify-center flex-shrink-0">
-                  <FolderOpen className="w-6 h-6 text-accent-blue" />
+                <div className="w-12 h-12 rounded-lg bg-bg-tertiary flex items-center justify-center flex-shrink-0">
+                  <FolderOpen className="w-6 h-6 text-text-muted" />
                 </div>
                 <div className="min-w-0">
                   <h1 className="text-lg font-bold text-text-primary truncate">{project.name}</h1>
@@ -253,7 +251,6 @@ export default function ProjectDetailPage() {
                 <span className="text-text-muted text-xs">members</span>
               </div>
             </div>
-          </div>
         </div>
 
         {/* ── Tabs ────────────────────────────────────────────────────────── */}
@@ -326,7 +323,7 @@ export default function ProjectDetailPage() {
       {/* ── View Full Result Modal ─────────────────────────────────────── */}
       {viewModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setViewModal(null)}>
-          <div className="glass-panel-elevated w-full max-w-3xl max-h-[80vh] flex flex-col animate-in" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-bg-secondary border border-border rounded-lg shadow-xl shadow-black/20 w-full max-w-3xl max-h-[80vh] flex flex-col animate-in" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
               <div className="flex items-center gap-2">
                 <span className={cn('text-sm font-semibold', TYPE_META[viewModal.type]?.color ?? 'text-text-primary')}>

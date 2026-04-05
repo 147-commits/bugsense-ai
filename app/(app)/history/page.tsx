@@ -220,7 +220,7 @@ export default function HistoryPage() {
       {viewItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setViewItem(null)}>
           <div
-            className="glass-panel-elevated w-full max-w-3xl max-h-[80vh] flex flex-col animate-in"
+            className="bg-bg-secondary border border-border rounded-lg shadow-xl shadow-black/20 w-full max-w-3xl max-h-[80vh] flex flex-col animate-in"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}

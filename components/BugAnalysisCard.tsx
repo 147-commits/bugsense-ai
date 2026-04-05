@@ -80,11 +80,11 @@ export default function BugAnalysisCard({ bug, qualityScore, testCases, reproChe
       onClick={() => toggleSection(id)}
       className="w-full flex items-center gap-3 py-3 text-left group"
     >
-      <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center group-hover:bg-bg-hover transition-colors', color ? `${color.replace('text-', 'bg-')}/10` : 'bg-bg-tertiary')}>
-        <Icon className={cn('w-4 h-4', color ?? 'text-text-secondary')} />
+      <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
+        <Icon className="w-4 h-4 text-text-muted" />
       </div>
-      <span className="text-sm font-semibold text-text-primary flex-1">{title}</span>
-      {badge && <span className="text-xs text-text-muted bg-bg-tertiary px-2 py-0.5 rounded-full">{badge}</span>}
+      <span className="text-xs font-medium text-text-primary uppercase tracking-wider flex-1">{title}</span>
+      {badge && <span className="text-[10px] text-text-muted">{badge}</span>}
       {expandedSections[id] ? <ChevronDown className="w-4 h-4 text-text-muted" /> : <ChevronRight className="w-4 h-4 text-text-muted" />}
     </button>
   );
@@ -165,14 +165,14 @@ export default function BugAnalysisCard({ bug, qualityScore, testCases, reproChe
               </div>
             ))}
             <div className="grid grid-cols-2 gap-3 mt-4 pt-3 border-t border-border">
-              <div className="p-3 rounded-xl bg-accent-emerald/5 border border-accent-emerald/10">
+              <div className="p-3 rounded-lg border-l-2 border-severity-low bg-bg-tertiary">
                 <div className="flex items-center gap-1.5 mb-1">
                   <Eye className="w-3 h-3 text-accent-emerald" />
                   <span className="text-xs font-medium text-accent-emerald">Expected</span>
                 </div>
                 <p className="text-xs text-text-secondary">{bug.expectedResult}</p>
               </div>
-              <div className="p-3 rounded-xl bg-accent-coral/5 border border-accent-coral/10">
+              <div className="p-3 rounded-lg border-l-2 border-severity-critical bg-bg-tertiary">
                 <div className="flex items-center gap-1.5 mb-1">
                   <AlertTriangle className="w-3 h-3 text-accent-coral" />
                   <span className="text-xs font-medium text-accent-coral">Actual</span>
@@ -215,7 +215,7 @@ export default function BugAnalysisCard({ bug, qualityScore, testCases, reproChe
           {expandedSections.rootCause && (
             <div className="py-4 space-y-3">
               {e.rootCauseAnalysis.map((rca, i) => (
-                <div key={i} className="p-4 rounded-xl bg-bg-tertiary border border-border">
+                <div key={i} className="p-4 rounded-lg bg-bg-tertiary border border-border">
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-accent-amber">Hypothesis #{i + 1}</span>
@@ -262,7 +262,7 @@ export default function BugAnalysisCard({ bug, qualityScore, testCases, reproChe
                 <span className="text-xs font-medium text-text-muted uppercase tracking-wider">Hypotheses</span>
                 <div className="mt-2 space-y-2">
                   {bug.rootCauseHypotheses.map((h, i) => (
-                    <div key={i} className="flex items-start gap-2 p-3 rounded-xl bg-bg-tertiary">
+                    <div key={i} className="flex items-start gap-2 p-3 rounded-lg bg-bg-tertiary">
                       <span className="text-accent-amber text-sm">#{i + 1}</span>
                       <span className="text-sm text-text-secondary">{typeof h === 'string' ? h : (h as Record<string, string>).hypothesis ?? JSON.stringify(h)}</span>
                     </div>
@@ -275,7 +275,7 @@ export default function BugAnalysisCard({ bug, qualityScore, testCases, reproChe
                     <span className="text-xs font-medium text-text-muted uppercase tracking-wider">Technical Details</span>
                     <p className="text-sm text-text-secondary mt-1 leading-relaxed">{bug.aiAnalysis.technicalDetails}</p>
                   </div>
-                  <div className="p-3 rounded-xl bg-accent-blue/5 border border-accent-blue/10">
+                  <div className="p-3 rounded-lg border-l-2 border-accent bg-bg-tertiary">
                     <span className="text-xs font-medium text-accent-blue">Suggested Fix</span>
                     <p className="text-sm text-text-secondary mt-1">{bug.aiAnalysis.suggestedFix}</p>
                   </div>
@@ -293,17 +293,17 @@ export default function BugAnalysisCard({ bug, qualityScore, testCases, reproChe
           {expandedSections.impact && (
             <div className="py-4 space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 rounded-xl bg-bg-tertiary">
+                <div className="p-3 rounded-lg bg-bg-tertiary">
                   <span className="text-[10px] text-text-muted uppercase tracking-wider">Affected Users</span>
                   <p className="text-sm text-text-primary font-medium mt-0.5">{e.impactRadius.affectedUserSegments}</p>
                 </div>
-                <div className="p-3 rounded-xl bg-bg-tertiary">
+                <div className="p-3 rounded-lg bg-bg-tertiary">
                   <span className="text-[10px] text-text-muted uppercase tracking-wider">Data Integrity Risk</span>
                   <p className="text-sm text-text-primary font-medium mt-0.5">{e.impactRadius.dataIntegrityRisk ?? 'Not assessed'}</p>
                 </div>
               </div>
               {e.impactRadius.affectedFeatures && (
-                <div className="p-3 rounded-xl bg-bg-tertiary">
+                <div className="p-3 rounded-lg bg-bg-tertiary">
                   <span className="text-[10px] text-text-muted uppercase tracking-wider">Affected Features</span>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {e.impactRadius.affectedFeatures.primary?.map((f) => (
@@ -318,7 +318,7 @@ export default function BugAnalysisCard({ bug, qualityScore, testCases, reproChe
                   )}
                 </div>
               )}
-              <div className="p-3 rounded-xl bg-bg-tertiary">
+              <div className="p-3 rounded-lg bg-bg-tertiary">
                 <span className="text-[10px] text-text-muted uppercase tracking-wider">Business Impact</span>
                 <p className="text-sm text-text-secondary mt-0.5">{e.impactRadius.businessImpact}</p>
               </div>
@@ -331,15 +331,15 @@ export default function BugAnalysisCard({ bug, qualityScore, testCases, reproChe
           <SectionHeader id="impact" icon={Target} title="Impact Prediction" />
           {expandedSections.impact && (
             <div className="py-4 grid grid-cols-2 gap-3">
-              <div className="p-3 rounded-xl bg-bg-tertiary">
+              <div className="p-3 rounded-lg bg-bg-tertiary">
                 <span className="text-[10px] text-text-muted uppercase">User Impact</span>
                 <p className={cn('text-sm font-bold', severityColor(bug.impactPrediction.userImpact))}>{bug.impactPrediction.userImpact}</p>
               </div>
-              <div className="p-3 rounded-xl bg-bg-tertiary">
+              <div className="p-3 rounded-lg bg-bg-tertiary">
                 <span className="text-[10px] text-text-muted uppercase">Users Affected</span>
                 <p className="text-sm font-bold text-text-primary">{bug.impactPrediction.estimatedUsersImpacted}</p>
               </div>
-              <div className="col-span-2 p-3 rounded-xl bg-bg-tertiary">
+              <div className="col-span-2 p-3 rounded-lg bg-bg-tertiary">
                 <span className="text-[10px] text-text-muted uppercase">Business Impact</span>
                 <p className="text-sm text-text-secondary mt-0.5">{bug.impactPrediction.businessImpact}</p>
               </div>
@@ -354,18 +354,18 @@ export default function BugAnalysisCard({ bug, qualityScore, testCases, reproChe
           <SectionHeader id="fix" icon={Wrench} title="Recommended Fix" badge={e.recommendedFix.estimatedEffort} color="text-accent-blue" />
           {expandedSections.fix && (
             <div className="py-4 space-y-3">
-              <div className="p-3 rounded-xl bg-accent-blue/5 border border-accent-blue/10">
+              <div className="p-3 rounded-lg border-l-2 border-accent bg-bg-tertiary">
                 <span className="text-xs font-medium text-accent-blue">Approach</span>
                 <p className="text-sm text-text-secondary mt-1">{e.recommendedFix.approach}</p>
               </div>
               {e.recommendedFix.workaround && e.recommendedFix.workaround !== 'No workaround available' && (
-                <div className="p-3 rounded-xl bg-accent-amber/5 border border-accent-amber/10">
+                <div className="p-3 rounded-lg border-l-2 border-severity-medium bg-bg-tertiary">
                   <span className="text-xs font-medium text-accent-amber">Temporary Workaround</span>
                   <p className="text-sm text-text-secondary mt-1">{e.recommendedFix.workaround}</p>
                 </div>
               )}
               {e.recommendedFix.regressionRisk && (
-                <div className="p-3 rounded-xl bg-accent-coral/5 border border-accent-coral/10">
+                <div className="p-3 rounded-lg border-l-2 border-severity-critical bg-bg-tertiary">
                   <span className="text-xs font-medium text-accent-coral">Regression Risk</span>
                   <p className="text-sm text-text-secondary mt-1">{e.recommendedFix.regressionRisk}</p>
                 </div>
@@ -418,15 +418,15 @@ export default function BugAnalysisCard({ bug, qualityScore, testCases, reproChe
           {expandedSections.triage && (
             <div className="py-4">
               <div className="grid grid-cols-3 gap-3">
-                <div className="p-3 rounded-xl bg-bg-tertiary">
+                <div className="p-3 rounded-lg bg-bg-tertiary">
                   <span className="text-[10px] text-text-muted uppercase tracking-wider">Owning Team</span>
                   <p className="text-sm text-text-primary font-medium mt-0.5">{e.triageRecommendation.owningTeam}</p>
                 </div>
-                <div className="p-3 rounded-xl bg-bg-tertiary">
+                <div className="p-3 rounded-lg bg-bg-tertiary">
                   <span className="text-[10px] text-text-muted uppercase tracking-wider">Sprint</span>
                   <p className="text-sm text-text-primary font-medium mt-0.5">{e.triageRecommendation.sprintRecommendation}</p>
                 </div>
-                <div className="p-3 rounded-xl bg-bg-tertiary">
+                <div className="p-3 rounded-lg bg-bg-tertiary">
                   <span className="text-[10px] text-text-muted uppercase tracking-wider">SLA</span>
                   <p className="text-sm text-text-primary font-medium mt-0.5">{e.triageRecommendation.sla}</p>
                 </div>
@@ -498,7 +498,7 @@ export default function BugAnalysisCard({ bug, qualityScore, testCases, reproChe
           {expandedSections.tests && (
             <div className="py-4 space-y-3">
               {testCases.map((tc, i) => (
-                <div key={i} className="p-4 rounded-xl bg-bg-tertiary border border-border">
+                <div key={i} className="p-4 rounded-lg bg-bg-tertiary border border-border">
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <h4 className="text-sm font-semibold text-text-primary">{tc.title}</h4>
                     <span className="badge bg-bg-hover text-text-muted border-border text-[10px]">{tc.type}</span>
@@ -811,7 +811,7 @@ function ReproductionChecklistSection({ data, expanded, onToggle }: { data: Reco
 
           {/* Minimal Reproduction */}
           {minimal && (
-            <div className="p-3 rounded-xl bg-accent-blue/5 border border-accent-blue/10">
+            <div className="p-3 rounded-lg border-l-2 border-accent bg-bg-tertiary">
               <span className="text-[10px] font-semibold text-accent-blue uppercase tracking-wider">Minimal Reproduction Case</span>
               <p className="text-[10px] text-text-muted mt-0.5 mb-1">Preconditions: {minimal.preconditions as string} | Est. time: {minimal.estimatedTime as string}</p>
               <div className="space-y-0.5">
@@ -824,7 +824,7 @@ function ReproductionChecklistSection({ data, expanded, onToggle }: { data: Reco
 
           {/* Reproduction Result */}
           {reproResult ? (
-            <div className="p-3 rounded-xl bg-bg-tertiary">
+            <div className="p-3 rounded-lg bg-bg-tertiary">
               <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">Reproduction Result</span>
               <p className="text-sm text-text-primary font-medium mt-0.5">{reproResult}</p>
             </div>
@@ -877,7 +877,7 @@ function ReproductionChecklistSection({ data, expanded, onToggle }: { data: Reco
               <span className="text-xs font-medium text-text-muted uppercase tracking-wider">Reproduction Scenarios</span>
               <div className="mt-2 space-y-2">
                 {legacyScenarios.map((sc, i) => (
-                  <div key={i} className="p-3 rounded-xl bg-bg-tertiary">
+                  <div key={i} className="p-3 rounded-lg bg-bg-tertiary">
                     <h5 className="text-sm font-medium text-text-primary mb-1">{sc.name as string}</h5>
                     {(sc.steps as string[])?.map((step, j) => (
                       <p key={j} className="text-xs text-text-secondary ml-3">• {step}</p>
@@ -947,7 +947,7 @@ function DuplicateSection({ duplicates }: { duplicates?: Record<string, unknown>
             const simPct = sim > 1 ? sim : Math.round(sim * 100);
 
             return (
-              <div key={i} className="p-4 rounded-xl bg-bg-tertiary border border-border mb-3 last:mb-0">
+              <div key={i} className="p-4 rounded-lg bg-bg-tertiary border border-border mb-3 last:mb-0">
                 {/* Header */}
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div>
@@ -1024,7 +1024,7 @@ function DuplicateSection({ duplicates }: { duplicates?: Record<string, unknown>
             <span className="text-sm font-semibold text-accent-violet">Related Bug Clusters</span>
           </div>
           {clusters.map((c, i) => (
-            <div key={i} className="p-3 rounded-xl bg-accent-violet/5 border border-accent-violet/10 mb-2 last:mb-0">
+            <div key={i} className="p-3 rounded-lg bg-bg-tertiary border border-border mb-2 last:mb-0">
               <p className="text-sm text-text-primary font-medium">{c.name as string}</p>
               <p className="text-xs text-text-secondary mt-0.5">{c.description as string}</p>
               <div className="flex items-center gap-2 mt-1">

@@ -47,8 +47,8 @@ const STACK_SUGGESTIONS = [
 function EmptyState({ onNew }: { onNew: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center py-24 text-center">
-      <div className="w-16 h-16 rounded-2xl bg-accent-blue/10 flex items-center justify-center mb-4">
-        <FolderOpen className="w-8 h-8 text-accent-blue" />
+      <div className="w-16 h-16 rounded-lg bg-bg-tertiary flex items-center justify-center mb-4">
+        <FolderOpen className="w-8 h-8 text-text-muted" />
       </div>
       <h3 className="text-base font-semibold text-text-primary mb-1">No projects yet</h3>
       <p className="text-sm text-text-muted mb-6 max-w-xs">
@@ -141,7 +141,7 @@ function TagInput({
       </div>
 
       {showSugg && filtered.length > 0 && (
-        <div className="absolute z-50 top-full mt-1 w-full glass-panel-elevated py-1 max-h-44 overflow-y-auto">
+        <div className="absolute z-50 top-full mt-1 w-full bg-bg-secondary border border-border rounded-lg shadow-xl shadow-black/20 py-1 max-h-44 overflow-y-auto">
           {filtered.slice(0, 8).map((s) => (
             <button
               key={s}
@@ -220,11 +220,11 @@ function ProjectModal({
       />
 
       {/* Panel */}
-      <div className="relative z-10 w-full max-w-lg glass-panel-elevated animate-in overflow-hidden">
+      <div className="relative z-10 w-full max-w-lg bg-bg-secondary border border-border rounded-lg shadow-xl shadow-black/20 animate-in overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-accent-blue/10 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg bg-bg-tertiary flex items-center justify-center">
               <FolderOpen className="w-4 h-4 text-accent-blue" />
             </div>
             <h2 className="text-sm font-semibold text-text-primary">
@@ -382,8 +382,8 @@ function ProjectCard({
       {/* Top row */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-blue/20 to-accent-violet/20 flex items-center justify-center flex-shrink-0">
-            <FolderOpen className="w-5 h-5 text-accent-blue" />
+          <div className="w-10 h-10 rounded-lg bg-bg-tertiary flex items-center justify-center flex-shrink-0">
+            <FolderOpen className="w-5 h-5 text-text-muted" />
           </div>
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-text-primary truncate">{project.name}</h3>
@@ -588,12 +588,11 @@ export default function ProjectsPage() {
 
       <div className="p-6 max-w-[1200px] mx-auto space-y-6">
         {/* Page header */}
-        <div className="glass-panel gradient-border p-5 relative overflow-hidden">
-          <div className="absolute inset-0 dot-pattern opacity-40" />
-          <div className="relative z-10 flex items-center justify-between">
+        <div className="glass-panel p-5">
+          <div className="flex items-center justify-between">
             <div>
               <h1 className="text-base font-semibold text-text-primary flex items-center gap-2">
-                <FolderOpen className="w-5 h-5 text-accent-blue" />
+                <FolderOpen className="w-5 h-5 text-text-muted" />
                 Your projects
                 <span className="ml-1 text-xs font-mono text-text-muted bg-bg-tertiary px-2 py-0.5 rounded-lg">
                   {projects.length}

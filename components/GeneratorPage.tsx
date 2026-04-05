@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
-import { Sparkles, Copy, Check, Download, ChevronDown, RotateCcw, Square, FileText } from 'lucide-react';
-import { Spinner } from '@/components/ui/Loading';
+import { Copy, Check, Download, ChevronDown, RotateCcw, Square, Loader2 } from 'lucide-react';
 import { FeedbackBar } from '@/components/ui/Feedback';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/lib/hooks/useStore';
@@ -52,13 +51,8 @@ export default function GeneratorPage({
     setResult(null);
     cancelledRef.current = false;
 
-    // Retry up to 2 times from frontend if backend fails
     for (let attempt = 0; attempt < 3; attempt++) {
-      if (cancelledRef.current) {
-        setError('Generation stopped by user.');
-        break;
-      }
-
+      if (cancelledRef.current) { setError('Generation stopped.'); break; }
       if (attempt > 0) {
         setError(`Retrying... (attempt ${attempt + 1}/3)`);
         await new Promise(r => setTimeout(r, 3000));
@@ -67,48 +61,31 @@ export default function GeneratorPage({
       }
 
       try {
-        // NO signal/AbortController — this ensures tab switching doesn't kill the request
         const res = await fetch(apiEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...buildPayload(input, options), projectId: currentProject?.id }),
         });
-
         if (cancelledRef.current) break;
-
         if (!res.ok) {
           const errText = await res.text();
-          // If rate limited or server error, retry
           if (res.status === 429 || res.status >= 500) {
-            if (attempt === 2) {
-              setError('AI is busy right now. Please wait 30 seconds and try again.');
-            }
+            if (attempt === 2) setError('AI is busy. Please wait 30 seconds and try again.');
             continue;
           }
           throw new Error(errText);
         }
-
         const data = await res.json();
-        if (!cancelledRef.current) {
-          setResult(data);
-          setError(null);
-        }
-        break; // Success — exit retry loop
-      } catch (err) {
-        if (attempt === 2) {
-          setError('Generation failed after 3 attempts. Wait 30 seconds and try again.');
-        }
+        if (!cancelledRef.current) { setResult(data); setError(null); }
+        break;
+      } catch {
+        if (attempt === 2) setError('Generation failed. Wait 30 seconds and try again.');
       }
     }
-
     setIsLoading(false);
-  }, [input, options, apiEndpoint, buildPayload]);
+  }, [input, options, apiEndpoint, buildPayload, currentProject?.id]);
 
-  const handleStop = () => {
-    cancelledRef.current = true;
-    setIsLoading(false);
-    setError('Generation stopped.');
-  };
+  const handleStop = () => { cancelledRef.current = true; setIsLoading(false); setError('Generation stopped.'); };
 
   const copyAll = () => {
     navigator.clipboard.writeText(JSON.stringify(result, null, 2));
@@ -119,10 +96,7 @@ export default function GeneratorPage({
   const downloadJSON = () => {
     const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${title.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.json`;
-    a.click();
+    const a = document.createElement('a'); a.href = url; a.download = `${title.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.json`; a.click();
     URL.revokeObjectURL(url);
   };
 
@@ -131,40 +105,39 @@ export default function GeneratorPage({
     if (!md) return downloadJSON();
     const blob = new Blob([md], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${title.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.md`;
-    a.click();
+    const a = document.createElement('a'); a.href = url; a.download = `${title.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.md`; a.click();
     URL.revokeObjectURL(url);
   };
 
   return (
-    <div className="p-6 max-w-[1400px] mx-auto">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="p-6 max-w-[1200px] mx-auto">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Left: Input */}
         <div className="space-y-4">
-          <div className="glass-panel p-6">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-10 h-10 rounded-xl bg-accent-blue/10 flex items-center justify-center">
+          <div className="glass-panel p-5">
+            {/* Header */}
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-bg-tertiary flex items-center justify-center text-text-muted">
                 {icon}
               </div>
               <div>
-                <h3 className="text-base font-semibold text-text-primary">{title}</h3>
-                <p className="text-xs text-text-muted">{subtitle}</p>
+                <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
+                <p className="text-[11px] text-text-muted">{subtitle}</p>
               </div>
             </div>
 
+            {/* Examples */}
             {exampleInputs.length > 0 && (
-              <div className="mb-4">
-                <button onClick={() => setShowExamples(!showExamples)} className="text-xs text-accent-blue hover:text-accent-blue/80 flex items-center gap-1 mb-2">
+              <div className="mb-3">
+                <button onClick={() => setShowExamples(!showExamples)} className="text-xs text-accent hover:underline flex items-center gap-1 mb-2">
                   Try an example <ChevronDown className={cn('w-3 h-3 transition-transform', showExamples && 'rotate-180')} />
                 </button>
                 {showExamples && (
-                  <div className="space-y-2 animate-slide-up">
+                  <div className="flex flex-wrap gap-1.5">
                     {exampleInputs.map((ex, i) => (
                       <button key={i} onClick={() => { setInput(ex.value); setShowExamples(false); }}
-                        className="w-full text-left text-xs text-text-secondary p-3 rounded-xl bg-bg-tertiary border border-border hover:border-accent-blue/30 transition-all line-clamp-2">
-                        <span className="font-medium text-text-primary">{ex.label}:</span> {ex.value.slice(0, 100)}...
+                        className="text-xs text-text-secondary bg-bg-tertiary px-2.5 py-1 rounded-lg hover:text-text-primary hover:bg-bg-elevated transition-colors">
+                        {ex.label}
                       </button>
                     ))}
                   </div>
@@ -172,20 +145,27 @@ export default function GeneratorPage({
               </div>
             )}
 
-            <textarea value={input} onChange={(e) => setInput(e.target.value)} placeholder={placeholder}
-              className="input-field min-h-[200px] resize-y font-mono text-sm leading-relaxed mb-4" disabled={isLoading} />
+            {/* Textarea */}
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={placeholder}
+              className="input-field min-h-[180px] resize-y font-mono text-xs leading-relaxed mb-3"
+              disabled={isLoading}
+            />
 
+            {/* Options */}
             {generatorOptions.length > 0 && (
-              <div className="space-y-3 mb-4 p-4 rounded-xl bg-bg-tertiary border border-border">
-                <span className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Options</span>
-                <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2.5 mb-3 p-3 rounded-lg bg-bg-tertiary border border-border">
+                <span className="text-[11px] font-medium text-text-muted uppercase tracking-wider">Options</span>
+                <div className="grid grid-cols-2 gap-2.5">
                   {generatorOptions.map((opt) => (
                     <div key={opt.id}>
                       {opt.type === 'select' && (
                         <div>
                           <label className="text-[11px] text-text-muted mb-1 block">{opt.label}</label>
                           <select value={options[opt.id] as string} onChange={(e) => setOptions((prev) => ({ ...prev, [opt.id]: e.target.value }))}
-                            className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-xs text-text-primary outline-none">
+                            className="w-full bg-bg-primary border border-border rounded-lg px-2.5 py-1.5 text-xs text-text-primary outline-none focus:border-accent">
                             {opt.options?.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                           </select>
                         </div>
@@ -193,7 +173,7 @@ export default function GeneratorPage({
                       {opt.type === 'toggle' && (
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input type="checkbox" checked={options[opt.id] as boolean} onChange={(e) => setOptions((prev) => ({ ...prev, [opt.id]: e.target.checked }))}
-                            className="rounded border-border accent-accent-blue" />
+                            className="rounded border-border accent-accent" />
                           <span className="text-xs text-text-secondary">{opt.label}</span>
                         </label>
                       )}
@@ -201,7 +181,7 @@ export default function GeneratorPage({
                         <div>
                           <label className="text-[11px] text-text-muted mb-1 block">{opt.label}</label>
                           <input type="number" value={options[opt.id] as number} onChange={(e) => setOptions((prev) => ({ ...prev, [opt.id]: Number(e.target.value) }))}
-                            className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-xs text-text-primary outline-none" />
+                            className="w-full bg-bg-primary border border-border rounded-lg px-2.5 py-1.5 text-xs text-text-primary outline-none focus:border-accent" />
                         </div>
                       )}
                     </div>
@@ -210,14 +190,14 @@ export default function GeneratorPage({
               </div>
             )}
 
-            {/* Generate / Stop Buttons */}
+            {/* Generate / Stop */}
             {isLoading ? (
-              <button onClick={handleStop} className="w-full py-3 rounded-xl font-medium text-sm bg-accent-coral text-white hover:bg-accent-coral/90 transition-all flex items-center justify-center gap-2">
-                <Square className="w-4 h-4" /> Stop Generation
+              <button onClick={handleStop} className="w-full py-2.5 rounded-lg font-medium text-sm bg-severity-critical text-white hover:bg-severity-critical/90 transition-colors flex items-center justify-center gap-2">
+                <Square className="w-3.5 h-3.5" /> Stop
               </button>
             ) : (
-              <button onClick={handleGenerate} disabled={!input.trim()} className="btn-primary w-full py-3">
-                <Sparkles className="w-4 h-4" /> Generate with AI
+              <button onClick={handleGenerate} disabled={!input.trim()} className="btn-primary w-full">
+                Generate
               </button>
             )}
           </div>
@@ -227,15 +207,14 @@ export default function GeneratorPage({
         <div className="space-y-4">
           {isLoading && (
             <div className="glass-panel p-8 text-center">
-              <Spinner size="lg" className="mx-auto mb-4" />
-              <p className="text-sm text-text-primary font-medium">AI is generating...</p>
-              <p className="text-xs text-text-muted mt-1">This takes 10-45 seconds. You can switch tabs — it won't stop.</p>
-              <p className="text-xs text-text-muted mt-0.5">If it takes longer, the AI will auto-retry.</p>
+              <Loader2 className="w-5 h-5 animate-spin text-text-muted mx-auto mb-3" />
+              <p className="text-sm text-text-primary">Generating...</p>
+              <p className="text-xs text-text-muted mt-1">This takes 10-45 seconds. You can switch tabs.</p>
             </div>
           )}
 
           {error && (
-            <div className="glass-panel p-6 border-severity-critical/30">
+            <div className="glass-panel p-5">
               <p className="text-sm text-severity-critical">{error}</p>
               <button onClick={handleGenerate} className="btn-secondary mt-3 text-xs">
                 <RotateCcw className="w-3 h-3" /> Retry
@@ -244,18 +223,18 @@ export default function GeneratorPage({
           )}
 
           {result && !isLoading && (
-            <div className="space-y-4 animate-slide-up">
+            <div className="space-y-4">
               {/* Action Bar */}
               <div className="flex gap-2">
-                <button onClick={copyAll} className="btn-secondary flex-1">
-                  {copied ? <Check className="w-4 h-4 text-accent-emerald" /> : <Copy className="w-4 h-4" />}
-                  {copied ? 'Copied!' : 'Copy JSON'}
+                <button onClick={copyAll} className="btn-ghost text-xs">
+                  {copied ? <Check className="w-3.5 h-3.5 text-severity-low" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? 'Copied' : 'Copy JSON'}
                 </button>
-                <button onClick={downloadMarkdown} className="btn-secondary flex-1">
-                  <Download className="w-4 h-4" /> Download
+                <button onClick={downloadMarkdown} className="btn-ghost text-xs">
+                  <Download className="w-3.5 h-3.5" /> Download
                 </button>
-                <button onClick={() => { setResult(null); }} className="btn-ghost">
-                  <RotateCcw className="w-4 h-4" />
+                <button onClick={() => setResult(null)} className="btn-ghost text-xs ml-auto">
+                  <RotateCcw className="w-3.5 h-3.5" /> Clear
                 </button>
               </div>
 
@@ -273,10 +252,7 @@ export default function GeneratorPage({
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ ...buildPayload(input, options), projectId: currentProject?.id, refineFeedback: feedback }),
                       });
-                      if (res.ok) {
-                        const data = await res.json();
-                        setResult(data);
-                      }
+                      if (res.ok) { const data = await res.json(); setResult(data); }
                     } catch {} finally { setIsLoading(false); }
                   }}
                   isRefining={isLoading}
@@ -286,13 +262,13 @@ export default function GeneratorPage({
           )}
 
           {!result && !isLoading && !error && (
-            <div className="glass-panel p-12 text-center">
-              <div className="w-16 h-16 mx-auto rounded-2xl bg-bg-tertiary flex items-center justify-center mb-4">
+            <div className="glass-panel p-10 text-center">
+              <div className="w-12 h-12 mx-auto rounded-lg bg-bg-tertiary flex items-center justify-center mb-3 text-text-muted">
                 {icon}
               </div>
-              <h3 className="text-base font-semibold text-text-primary mb-2">AI Output</h3>
-              <p className="text-sm text-text-muted max-w-xs mx-auto">
-                Enter your input on the left and click Generate to see AI-powered results here
+              <h3 className="text-sm font-medium text-text-primary mb-1">Output</h3>
+              <p className="text-xs text-text-muted max-w-xs mx-auto">
+                Enter your input and click Generate to see results
               </p>
             </div>
           )}
