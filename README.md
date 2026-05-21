@@ -84,6 +84,10 @@ Edit `.env.local`:
 ```env
 AI_API_KEY=sk-ant-your-key-here
 DATABASE_URL=postgresql://user:password@localhost:5432/bugsense
+NEXTAUTH_SECRET=long-random-string
+# Used to encrypt integration secrets (Jira refresh tokens, Slack bot tokens) at rest.
+# Generate with: openssl rand -hex 32
+TOKEN_ENC_KEY=
 ```
 
 > **Note:** The app runs in **demo mode** without an API key, using realistic mock AI responses.

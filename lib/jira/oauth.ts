@@ -1,5 +1,8 @@
 import crypto from 'crypto';
+import { encryptToken } from '@/lib/crypto/tokens';
 import type { JiraOAuthTokens } from '@/types/jira';
+
+export { decryptToken, encryptToken } from '@/lib/crypto/tokens';
 
 const AUTH_URL = 'https://auth.atlassian.com/authorize';
 const TOKEN_URL = 'https://auth.atlassian.com/oauth/token';
@@ -162,33 +165,6 @@ export function verifyState(state: string, maxAgeMs = 10 * 60_000): StatePayload
   } catch {
     return null;
   }
-}
-
-// ── Refresh-token encryption (AES-256-GCM) ─────────────────────────────────
-
-function getEncKey(): Buffer {
-  const raw = process.env.JIRA_TOKEN_ENC_KEY;
-  if (!raw) throw new Error('JIRA_TOKEN_ENC_KEY required to encrypt Jira refresh tokens');
-  if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, 'hex');
-  const buf = Buffer.from(raw, 'base64');
-  if (buf.length !== 32) throw new Error('JIRA_TOKEN_ENC_KEY must be 32 bytes (64 hex or base64)');
-  return buf;
-}
-
-export function encryptToken(plain: string): string {
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', getEncKey(), iv);
-  const ct = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
-  return `${iv.toString('base64url')}.${cipher.getAuthTag().toString('base64url')}.${ct.toString('base64url')}`;
-}
-
-export function decryptToken(enc: string): string {
-  const parts = enc.split('.');
-  if (parts.length !== 3) throw new Error('Invalid encrypted token format');
-  const [ivB, tagB, ctB] = parts;
-  const decipher = crypto.createDecipheriv('aes-256-gcm', getEncKey(), Buffer.from(ivB, 'base64url'));
-  decipher.setAuthTag(Buffer.from(tagB, 'base64url'));
-  return Buffer.concat([decipher.update(Buffer.from(ctB, 'base64url')), decipher.final()]).toString('utf8');
 }
 
 export function generateWebhookSecret(): string {
