@@ -3,9 +3,10 @@ import { eq, and, or, ilike, desc, asc, SQL } from 'drizzle-orm';
 import { z } from 'zod';
 import { requireAuth } from '@/lib/auth/requireAuth';
 import { db } from '@/lib/database/db';
-import { bugReports } from '@/lib/database/schema';
+import { bugReports, integrations, organizationMembers } from '@/lib/database/schema';
 import { mockBugs } from '@/lib/utils/mockData';
 import { parseQuery } from '@/lib/validation';
+import { parseJiraConfig } from '@/types/jira';
 
 const QuerySchema = z.object({
   projectId: z.string().min(1).max(128).optional(),
@@ -67,8 +68,25 @@ export async function GET(req: NextRequest) {
   const bugs = await db.query.bugReports.findMany({
     where: filters.length ? and(...filters) : undefined,
     orderBy,
-    with: { testCases: true },
+    with: { testCases: true, jiraLink: true },
   });
 
-  return NextResponse.json({ bugs, total: bugs.length });
+  // Attach the org's Jira siteUrl once so the UI can render "open in Jira"
+  // links without joining per row.
+  let jira: { siteUrl: string } | null = null;
+  const membership = await db.query.organizationMembers.findFirst({
+    where: eq(organizationMembers.userId, auth.user.id),
+    orderBy: organizationMembers.joinedAt,
+  });
+  if (membership) {
+    const integration = await db.query.integrations.findFirst({
+      where: and(eq(integrations.organizationId, membership.organizationId), eq(integrations.type, 'JIRA')),
+    });
+    if (integration?.isActive) {
+      const cfg = parseJiraConfig(integration.config);
+      if (cfg) jira = { siteUrl: cfg.siteUrl };
+    }
+  }
+
+  return NextResponse.json({ bugs, total: bugs.length, jira });
 }

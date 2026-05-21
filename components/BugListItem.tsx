@@ -1,16 +1,19 @@
 'use client';
 
-import { Clock } from 'lucide-react';
-import { cn, severityColor, priorityLabel, formatTimeAgo } from '@/lib/utils';
+import { Clock, ExternalLink } from 'lucide-react';
+import { cn, severityColor, formatTimeAgo } from '@/lib/utils';
 import type { BugReport } from '@/types';
 
 interface BugListItemProps {
   bug: BugReport;
   onClick?: () => void;
   compact?: boolean;
+  jiraSiteUrl?: string;
 }
 
-export default function BugListItem({ bug, onClick, compact = false }: BugListItemProps) {
+export default function BugListItem({ bug, onClick, compact = false, jiraSiteUrl }: BugListItemProps) {
+  const jiraKey = bug.jiraLink?.jiraIssueKey;
+  const jiraHref = jiraKey && jiraSiteUrl ? `${jiraSiteUrl.replace(/\/$/, '')}/browse/${jiraKey}` : null;
   if (compact) {
     return (
       <button
@@ -49,6 +52,22 @@ export default function BugListItem({ bug, onClick, compact = false }: BugListIt
             </span>
             {bug.qualityScore != null && (
               <span className="text-[10px] text-text-muted font-mono">QS: {bug.qualityScore}</span>
+            )}
+            {jiraKey && (
+              jiraHref ? (
+                <a
+                  href={jiraHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex items-center gap-1 badge bg-accent-violet/10 text-accent-violet text-[10px]"
+                >
+                  {jiraKey}
+                  <ExternalLink className="w-2.5 h-2.5" />
+                </a>
+              ) : (
+                <span className="badge bg-accent-violet/10 text-accent-violet text-[10px]">{jiraKey}</span>
+              )
             )}
             <span className="flex items-center gap-1 ml-auto text-text-muted">
               <Clock className="w-3 h-3" />

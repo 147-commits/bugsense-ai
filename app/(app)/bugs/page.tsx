@@ -14,7 +14,12 @@ import type { BugReport, Severity, BugStatus } from '@/types';
 const severities: Severity[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'];
 const statuses: BugStatus[] = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'DUPLICATE'];
 
-type BugsResponse = { bugs: BugReport[]; total: number; demoMode?: boolean };
+type BugsResponse = {
+  bugs: BugReport[];
+  total: number;
+  demoMode?: boolean;
+  jira?: { siteUrl: string } | null;
+};
 
 export default function BugsPage() {
   const { currentProject } = useAppStore();
@@ -26,6 +31,8 @@ export default function BugsPage() {
   const [bugs, setBugs] = useState<BugReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [demoMode, setDemoMode] = useState(false);
+  const [jiraSiteUrl, setJiraSiteUrl] = useState<string | undefined>(undefined);
+  const [syncingBugId, setSyncingBugId] = useState<string | null>(null);
 
   const fetchBugs = useCallback(async () => {
     setLoading(true);
@@ -38,6 +45,7 @@ export default function BugsPage() {
         const data: BugsResponse = await res.json();
         setBugs(data.bugs ?? []);
         setDemoMode(Boolean(data.demoMode));
+        setJiraSiteUrl(data.jira?.siteUrl);
       } else {
         setBugs(mockBugs);
         setDemoMode(true);
@@ -212,7 +220,13 @@ export default function BugsPage() {
                 </div>
               ) : (
                 filteredBugs.map((bug) => (
-                  <BugListItem key={bug.id} bug={bug} onClick={() => setSelectedBug(bug)} compact={!!selectedBug} />
+                  <BugListItem
+                    key={bug.id}
+                    bug={bug}
+                    onClick={() => setSelectedBug(bug)}
+                    compact={!!selectedBug}
+                    jiraSiteUrl={jiraSiteUrl}
+                  />
                 ))
               )}
             </div>
@@ -224,6 +238,31 @@ export default function BugsPage() {
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-text-secondary">Bug Details</h3>
                 <div className="flex items-center gap-2">
+                  {selectedBug.jiraLink?.jiraIssueKey && jiraSiteUrl && (
+                    <a
+                      href={`${jiraSiteUrl.replace(/\/$/, '')}/browse/${selectedBug.jiraLink.jiraIssueKey}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="badge bg-accent-violet/10 text-accent-violet text-[10px] inline-flex items-center gap-1"
+                    >
+                      {selectedBug.jiraLink.jiraIssueKey}
+                    </a>
+                  )}
+                  <button
+                    onClick={async () => {
+                      setSyncingBugId(selectedBug.id);
+                      try {
+                        const res = await fetch(`/api/bugs/${selectedBug.id}/jira/sync`, { method: 'POST' });
+                        if (res.ok) await fetchBugs();
+                      } finally {
+                        setSyncingBugId(null);
+                      }
+                    }}
+                    disabled={syncingBugId === selectedBug.id}
+                    className="btn-ghost text-xs disabled:opacity-50"
+                  >
+                    {syncingBugId === selectedBug.id ? 'Syncing…' : 'Sync to Jira'}
+                  </button>
                   <select
                     value={selectedBug.status}
                     onChange={(e) => updateBugStatus(selectedBug.id, e.target.value as BugStatus)}

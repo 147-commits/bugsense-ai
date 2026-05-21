@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Settings, Key, Globe, Bell, Palette, Database, Shield, ExternalLink } from 'lucide-react';
+import { Settings, Key, Globe, Database, Shield } from 'lucide-react';
 import TopBar from '@/components/layout/TopBar';
+import JiraSection from '@/components/settings/JiraSection';
 import { cn } from '@/lib/utils';
 
 export default function SettingsPage() {
@@ -137,8 +138,8 @@ export default function SettingsPage() {
           </div>
 
           <div className="space-y-3">
+            <JiraSection />
             {[
-              { name: 'Jira', desc: 'Export bugs directly to Jira issues', connected: false },
               { name: 'GitHub Issues', desc: 'Push bugs to GitHub repositories', connected: false },
               { name: 'Slack', desc: 'Get bug alerts in Slack channels', connected: false },
               { name: 'PostgreSQL', desc: 'Database for persistent storage', connected: true },

@@ -25,6 +25,7 @@ export interface BugReport {
   tags: string[];
   clusterId: string | null;
   testCases?: TestCase[];
+  jiraLink?: { jiraIssueKey: string; jiraIssueId: string; lastOutboundAt: string | null } | null;
   createdAt: string;
   updatedAt: string;
 }
