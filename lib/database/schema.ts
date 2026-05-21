@@ -223,6 +223,32 @@ export const releaseReadinessSnapshotsRelations = relations(releaseReadinessSnap
   project: one(projects, { fields: [releaseReadinessSnapshots.projectId], references: [projects.id] }),
 }));
 
+export const bugJiraLinks = pgTable('BugJiraLink', {
+  id: varchar('id').primaryKey().$defaultFn(cuid),
+  bugReportId: varchar('bugReportId').notNull().references(() => bugReports.id, { onDelete: 'cascade' }),
+  integrationId: varchar('integrationId').notNull().references(() => integrations.id, { onDelete: 'cascade' }),
+  jiraIssueKey: varchar('jiraIssueKey').notNull(),
+  jiraIssueId: varchar('jiraIssueId').notNull(),
+  jiraCloudId: varchar('jiraCloudId').notNull(),
+  lastOutboundHash: varchar('lastOutboundHash'),
+  lastOutboundAt: timestamp('lastOutboundAt', { mode: 'date' }),
+  lastInboundAt: timestamp('lastInboundAt', { mode: 'date' }),
+  createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
+}, (t) => ({
+  bugUnique: uniqueIndex('BugJiraLink_bugReportId_key').on(t.bugReportId),
+  jiraKeyIdx: index('BugJiraLink_jiraIssueKey_idx').on(t.jiraIssueKey),
+  integrationIdx: index('BugJiraLink_integrationId_idx').on(t.integrationId),
+}));
+
+export const processedJiraEvents = pgTable('ProcessedJiraEvent', {
+  eventId: varchar('eventId').primaryKey(),
+  integrationId: varchar('integrationId').notNull().references(() => integrations.id, { onDelete: 'cascade' }),
+  receivedAt: timestamp('receivedAt', { mode: 'date' }).notNull().defaultNow(),
+}, (t) => ({
+  integrationIdx: index('ProcessedJiraEvent_integrationId_idx').on(t.integrationId),
+  receivedIdx: index('ProcessedJiraEvent_receivedAt_idx').on(t.receivedAt),
+}));
+
 export const analyticsSnapshots = pgTable('AnalyticsSnapshot', {
   id: varchar('id').primaryKey().$defaultFn(cuid),
   date: timestamp('date', { mode: 'date' }).notNull().defaultNow(),
@@ -281,9 +307,11 @@ export const usageLogsRelations = relations(usageLogs, ({ one }) => ({
   project: one(projects, { fields: [usageLogs.projectId], references: [projects.id] }),
 }));
 
-export const integrationsRelations = relations(integrations, ({ one }) => ({
+export const integrationsRelations = relations(integrations, ({ one, many }) => ({
   organization: one(organizations, { fields: [integrations.organizationId], references: [organizations.id] }),
   project: one(projects, { fields: [integrations.projectId], references: [projects.id] }),
+  bugJiraLinks: many(bugJiraLinks),
+  processedJiraEvents: many(processedJiraEvents),
 }));
 
 export const bugReportsRelations = relations(bugReports, ({ one, many }) => ({
@@ -293,6 +321,16 @@ export const bugReportsRelations = relations(bugReports, ({ one, many }) => ({
   cluster: one(bugClusters, { fields: [bugReports.clusterId], references: [bugClusters.id] }),
   testCases: many(testCases),
   chatMessages: many(chatMessages),
+  jiraLink: one(bugJiraLinks, { fields: [bugReports.id], references: [bugJiraLinks.bugReportId] }),
+}));
+
+export const bugJiraLinksRelations = relations(bugJiraLinks, ({ one }) => ({
+  bugReport: one(bugReports, { fields: [bugJiraLinks.bugReportId], references: [bugReports.id] }),
+  integration: one(integrations, { fields: [bugJiraLinks.integrationId], references: [integrations.id] }),
+}));
+
+export const processedJiraEventsRelations = relations(processedJiraEvents, ({ one }) => ({
+  integration: one(integrations, { fields: [processedJiraEvents.integrationId], references: [integrations.id] }),
 }));
 
 export const testCasesRelations = relations(testCases, ({ one }) => ({
@@ -327,3 +365,9 @@ export type UsageLog = typeof usageLogs.$inferSelect;
 export type NewUsageLog = typeof usageLogs.$inferInsert;
 export type ReleaseReadinessSnapshot = typeof releaseReadinessSnapshots.$inferSelect;
 export type NewReleaseReadinessSnapshot = typeof releaseReadinessSnapshots.$inferInsert;
+export type Integration = typeof integrations.$inferSelect;
+export type NewIntegration = typeof integrations.$inferInsert;
+export type BugJiraLink = typeof bugJiraLinks.$inferSelect;
+export type NewBugJiraLink = typeof bugJiraLinks.$inferInsert;
+export type ProcessedJiraEvent = typeof processedJiraEvents.$inferSelect;
+export type NewProcessedJiraEvent = typeof processedJiraEvents.$inferInsert;
