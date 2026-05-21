@@ -1,16 +1,14 @@
 // ═══════════════════════════════════════════════════════════════
 // BugSense AI — Complete AI Engine
-// All AI-powered generators for QA workflows
+// All AI-powered generators for QA workflows.
+// Anthropic client + retry/cache/timeout live in ./client, ./cache, ./runner.
 // ═══════════════════════════════════════════════════════════════
 
-const RAW_API_KEY = process.env.AI_API_KEY || process.env.NVIDIA_API_KEY || '';
-// Treat placeholder/dummy keys as empty so we fall back to mock mode
-const IS_PLACEHOLDER = !RAW_API_KEY || RAW_API_KEY.includes('xxxxx') || RAW_API_KEY.length < 20;
-const AI_API_KEY = IS_PLACEHOLDER ? '' : RAW_API_KEY;
-const AI_MODEL = process.env.AI_MODEL || 'meta/llama-3.3-70b-instruct';
-const IS_NVIDIA = AI_API_KEY.startsWith('nvapi-');
+import { z } from 'zod';
+import { runJsonAI, runTextAI } from './runner';
 
-// Global accuracy instruction prepended to ALL prompts
+// Global accuracy instruction prepended to every system prompt before it
+// reaches the model.
 const ACCURACY_RULES = `
 CRITICAL ACCURACY RULES — Follow these in every response:
 1. NEVER fabricate, guess, or assume information not present in the user's input.
@@ -23,158 +21,77 @@ CRITICAL ACCURACY RULES — Follow these in every response:
 8. If the user's input is too vague to generate useful output, set confidence below 0.5 and include specific questions in a "clarificationNeeded" array.
 `;
 
-interface AIResponse {
-  content: { type: string; text: string }[];
-}
+// ── Output schemas (permissive — verify the top-level shape, let inner
+// fields stay unknown so we keep the existing loose `Record<string, unknown>`
+// public return types). ──────────────────────────────────────────────────────
 
-async function callAI(systemPrompt: string, userMessage: string): Promise<string> {
-  if (!AI_API_KEY) {
-    return getMockResponse(systemPrompt, userMessage);
-  }
+const AnalyzeBugSchema = z
+  .object({
+    title: z.string(),
+    description: z.string(),
+    severity: z.string(),
+    priority: z.string(),
+  })
+  .passthrough();
 
-  const fullSystemPrompt = ACCURACY_RULES + '\n\n' + systemPrompt;
+const QualityScoreSchema = z
+  .object({
+    score: z.number(),
+  })
+  .passthrough();
 
-  const apiUrl = IS_NVIDIA
-    ? 'https://integrate.api.nvidia.com/v1/chat/completions'
-    : 'https://api.anthropic.com/v1/messages';
+const DuplicatesSchema = z
+  .object({
+    duplicates: z.array(z.unknown()),
+  })
+  .passthrough();
 
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  let body: string;
+const TestCasesSchema = z
+  .object({
+    testCases: z.array(z.unknown()),
+  })
+  .passthrough();
 
-  if (IS_NVIDIA) {
-    headers['Authorization'] = `Bearer ${AI_API_KEY}`;
-    body = JSON.stringify({
-      model: AI_MODEL,
-      max_tokens: 4096,
-      temperature: 0.3,
-      messages: [
-        { role: 'system', content: fullSystemPrompt },
-        { role: 'user', content: userMessage },
-      ],
-    });
-  } else {
-    headers['x-api-key'] = AI_API_KEY;
-    headers['anthropic-version'] = '2023-06-01';
-    body = JSON.stringify({
-      model: AI_MODEL,
-      max_tokens: 4096,
-      temperature: 0.3,
-      system: fullSystemPrompt,
-      messages: [{ role: 'user', content: userMessage }],
-    });
-  }
+const ReproChecklistSchema = z.object({}).passthrough();
+const TestCasesFromStorySchema = z.object({}).passthrough();
+const ApiTestsSchema = z.object({}).passthrough();
+const ReleaseNotesSchema = z.object({}).passthrough();
+const TestDataSchema = z.object({}).passthrough();
+const TestPlanSchema = z.object({}).passthrough();
+const AutomationScriptSchema = z.object({}).passthrough();
+const ExpandCoverageSchema = z.object({}).passthrough();
+const QADocumentationSchema = z.object({}).passthrough();
 
-  // Retry up to 3 times for rate limits and transient errors
-  let lastError = '';
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (attempt > 0) {
-      // Wait longer between retries: 5s, then 10s — NVIDIA needs more time
-      const waitTime = attempt === 1 ? 5000 : 10000;
-      console.log(`Retry attempt ${attempt + 1} in ${waitTime/1000}s...`);
-      await new Promise(r => setTimeout(r, waitTime));
-    }
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
-    try {
-      const response = await fetch(apiUrl, { method: 'POST', headers, body });
-
-      if (response.status === 429) {
-        lastError = 'Rate limited by AI provider. Retrying...';
-        continue;
-      }
-
-      if (response.status === 408 || response.status === 504) {
-        // Timeout — retry
-        lastError = 'Request timed out. Retrying...';
-        continue;
-      }
-
-      if (!response.ok) {
-        const err = await response.text();
-        lastError = `AI API error: ${response.status} - ${err}`;
-        if (response.status >= 500) continue; // Retry on server errors
-        throw new Error(lastError);
-      }
-
-      if (IS_NVIDIA) {
-        const data = await response.json();
-        const content = data.choices?.[0]?.message?.content || '';
-        if (!content) {
-          lastError = 'AI returned empty response. Retrying...';
-          continue;
-        }
-        return content;
-      } else {
-        const data: AIResponse = await response.json();
-        return data.content.map((c) => c.text).join('');
-      }
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : 'Unknown error';
-      if (attempt === 2) throw new Error(lastError);
-    }
-  }
-
-  throw new Error(lastError || 'Failed after 3 attempts');
-}
-
-function extractJSON(text: string): Record<string, unknown> {
-  // Try to find JSON in code blocks first
-  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  let jsonStr = '';
-
-  if (jsonMatch) {
-    jsonStr = jsonMatch[1].trim();
-  } else {
-    // Try to find raw JSON object
-    const objMatch = text.match(/\{[\s\S]*\}/);
-    if (objMatch) {
-      jsonStr = objMatch[0];
-    } else {
-      jsonStr = text;
-    }
-  }
-
-  // Clean up common issues that break JSON parsing:
-  // 1. Remove control characters inside string values (tabs, newlines in code)
-  // 2. Fix unescaped newlines inside JSON string values
+/** Build a typed mock from the existing keyword-routed mock data. */
+function mockFromKeywordRouter<T>(systemPrompt: string): T {
+  const raw = getMockResponse(systemPrompt, '');
   try {
-    return JSON.parse(jsonStr);
+    return JSON.parse(raw) as T;
   } catch {
-    // If first parse fails, try cleaning the string
-    const cleaned = jsonStr
-      // Replace literal newlines/tabs inside strings with escaped versions
-      .replace(/[\x00-\x1F\x7F]/g, (ch) => {
-        if (ch === '\n') return '\\n';
-        if (ch === '\r') return '\\r';
-        if (ch === '\t') return '\\t';
-        return '';
-      });
-
-    try {
-      return JSON.parse(cleaned);
-    } catch {
-      // Last resort: try to extract just the first complete JSON object
-      // by counting braces
-      let depth = 0;
-      let start = -1;
-      for (let i = 0; i < cleaned.length; i++) {
-        if (cleaned[i] === '{') {
-          if (depth === 0) start = i;
-          depth++;
-        } else if (cleaned[i] === '}') {
-          depth--;
-          if (depth === 0 && start >= 0) {
-            try {
-              return JSON.parse(cleaned.substring(start, i + 1));
-            } catch {
-              // continue searching
-              start = -1;
-            }
-          }
-        }
-      }
-      throw new Error('Could not parse AI response as JSON. Please try again.');
-    }
+    return {} as T;
   }
+}
+
+/**
+ * Runs a JSON-producing AI call through the shared runner.
+ * Prepends ACCURACY_RULES to the system prompt and falls back to the
+ * keyword-routed mock when the AI is unavailable or returns invalid output.
+ */
+function runJson<T>(
+  name: string,
+  systemPrompt: string,
+  userMessage: string,
+  schema: z.ZodType<T>,
+): Promise<T> {
+  return runJsonAI({
+    name,
+    system: ACCURACY_RULES + '\n\n' + systemPrompt,
+    user: userMessage,
+    schema,
+    mock: () => mockFromKeywordRouter<T>(systemPrompt),
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -297,8 +214,7 @@ Return ONLY valid JSON with this exact structure:
   if (logContent) userMessage += `\n\nError Logs:\n${logContent}`;
   if (screenshotDescription) userMessage += `\n\nScreenshot Analysis:\n${screenshotDescription}`;
 
-  const response = await callAI(systemPrompt, userMessage);
-  return extractJSON(response);
+  return runJson('analyzeBug', systemPrompt, userMessage, AnalyzeBugSchema);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -385,8 +301,12 @@ Return ONLY valid JSON:
   "summary": "One-sentence overall assessment"
 }`;
 
-  const response = await callAI(systemPrompt, `Bug Report to Evaluate:\n${JSON.stringify(bugReport, null, 2)}`);
-  return extractJSON(response);
+  return runJson(
+    'calculateQualityScore',
+    systemPrompt,
+    `Bug Report to Evaluate:\n${JSON.stringify(bugReport, null, 2)}`,
+    QualityScoreSchema,
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -461,8 +381,7 @@ RULES:
 - Return empty arrays if no matches found`;
 
   const userMessage = `New Bug:\nTitle: ${newBug.title}\nDescription: ${newBug.description}\n\nExisting Bugs:\n${existingBugs.map((b) => `ID: ${b.id} | Title: ${b.title} | Desc: ${b.description}`).join('\n')}`;
-  const response = await callAI(systemPrompt, userMessage);
-  return extractJSON(response);
+  return runJson('detectDuplicates', systemPrompt, userMessage, DuplicatesSchema);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -474,8 +393,12 @@ Return ONLY valid JSON:
 { "testCases": [{ "title": "", "description": "", "steps": [""], "expectedResult": "", "type": "regression|smoke|edge_case|negative", "priority": "P0|P1|P2|P3" }] }
 Generate 3-5 comprehensive test cases.`;
 
-  const response = await callAI(systemPrompt, JSON.stringify(bugReport));
-  const result = extractJSON(response);
+  const result = await runJson(
+    'generateTestCases',
+    systemPrompt,
+    JSON.stringify(bugReport),
+    TestCasesSchema,
+  );
   return (result.testCases as Array<Record<string, unknown>>) || [];
 }
 
@@ -548,8 +471,12 @@ Return ONLY valid JSON:
   "scenarios": [{ "name": "Scenario name", "steps": ["Step"], "expectedOutcome": "Expected" }]
 }`;
 
-  const response = await callAI(systemPrompt, `Bug Report:\n${JSON.stringify(bugReport, null, 2)}`);
-  return extractJSON(response);
+  return runJson(
+    'generateReproductionChecklist',
+    systemPrompt,
+    `Bug Report:\n${JSON.stringify(bugReport, null, 2)}`,
+    ReproChecklistSchema,
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -669,8 +596,12 @@ Return ONLY valid JSON:
   }
 }`;
 
-  const response = await callAI(systemPrompt, `User Story / Requirement:\n${userStory}`);
-  return extractJSON(response);
+  return runJson(
+    'generateTestCasesFromStory',
+    systemPrompt,
+    `User Story / Requirement:\n${userStory}`,
+    TestCasesFromStorySchema,
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -774,8 +705,12 @@ Return ONLY valid JSON:
   "totalTests": 0
 }`;
 
-  const response = await callAI(systemPrompt, `API Endpoint Description:\n${apiDescription}\n\nOutput Format: ${format}`);
-  return extractJSON(response);
+  return runJson(
+    'generateAPITests',
+    systemPrompt,
+    `API Endpoint Description:\n${apiDescription}\n\nOutput Format: ${format}`,
+    ApiTestsSchema,
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -851,7 +786,7 @@ Return ONLY valid JSON:
   },
   "engineeringNotes": {
     "deploymentSteps": ["Step 1", "Step 2"],
-    "migrations": [{ "type": "database|config|api", "description": "What to migrate", "command": "npx prisma migrate deploy", "rollbackCommand": "Rollback command" }],
+    "migrations": [{ "type": "database|config|api", "description": "What to migrate", "command": "npm run db:migrate", "rollbackCommand": "Rollback command" }],
     "configChanges": [{ "variable": "ENV_VAR_NAME", "action": "add|change|remove", "value": "new-value", "description": "Why" }],
     "breakingChanges": [{ "title": "Change title", "description": "What changed", "before": "Old code/API example", "after": "New code/API example", "migrationGuide": "Steps to migrate" }],
     "performanceImpact": [{ "area": "Login API", "before": "450ms avg", "after": "120ms avg", "improvement": "73% faster" }],
@@ -877,8 +812,12 @@ Return ONLY valid JSON:
   "markdownOutput": "Full Keep a Changelog formatted markdown"
 }`;
 
-  const response = await callAI(systemPrompt, `Input (tickets/commits/changes):\n${input}`);
-  return extractJSON(response);
+  return runJson(
+    'generateReleaseNotes',
+    systemPrompt,
+    `Input (tickets/commits/changes):\n${input}`,
+    ReleaseNotesSchema,
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -973,8 +912,12 @@ Return ONLY valid JSON:
   "totalRecords": 0
 }`;
 
-  const response = await callAI(systemPrompt, `Scenario:\n${scenario}\n\nRecord Count: ${options.count}\nOutput Format: ${options.format}\nLocale: ${locale}`);
-  return extractJSON(response);
+  return runJson(
+    'generateTestData',
+    systemPrompt,
+    `Scenario:\n${scenario}\n\nRecord Count: ${options.count}\nOutput Format: ${options.format}\nLocale: ${locale}`,
+    TestDataSchema,
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1087,8 +1030,12 @@ Return ONLY valid JSON:
   "markdownOutput": "Complete Confluence-ready markdown with all sections and tables"
 }`;
 
-  const response = await callAI(systemPrompt, `Sprint Information:\n${sprintInfo}`);
-  return extractJSON(response);
+  return runJson(
+    'generateTestPlan',
+    systemPrompt,
+    `Sprint Information:\n${sprintInfo}`,
+    TestPlanSchema,
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1213,8 +1160,12 @@ Return ONLY valid JSON:
   "debugCommand": "npx playwright test --debug"
 }`;
 
-  const response = await callAI(systemPrompt, `Test Scenario to Automate:\n${scenario}`);
-  return extractJSON(response);
+  return runJson(
+    'generateAutomationScript',
+    systemPrompt,
+    `Test Scenario to Automate:\n${scenario}`,
+    AutomationScriptSchema,
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1314,8 +1265,12 @@ Return ONLY valid JSON:
   "executiveSummary": "2-3 sentence summary: current state, key gaps, projected improvement, recommended priority"
 }`;
 
-  const response = await callAI(systemPrompt, `Existing Test Cases:\n${existingTests}`);
-  return extractJSON(response);
+  return runJson(
+    'expandCoverage',
+    systemPrompt,
+    `Existing Test Cases:\n${existingTests}`,
+    ExpandCoverageSchema,
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1602,8 +1557,12 @@ FINAL CHECKS before responding:
 5. Is the markdownOutput a COMPLETE document, not a summary? If it's abbreviated, expand it.
 - Use professional formatting: numbered sections, proper markdown tables, clear headers.`;
 
-  const response = await callAI(systemPrompt, `Project/Context Information:\n${input}\n\nDocument Type Requested: ${docTypeLabel}`);
-  return extractJSON(response);
+  return runJson(
+    'generateQADocumentation',
+    systemPrompt,
+    `Project/Context Information:\n${input}\n\nDocument Type Requested: ${docTypeLabel}`,
+    QADocumentationSchema,
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1678,55 +1637,19 @@ RESPONSE PATTERNS:
 - "How critical is this?" → Assess using severity criteria (user impact, data risk, workaround availability)
 - "Should we release with this bug?" → Risk-based go/no-go framework with evidence`;
 
-  if (!AI_API_KEY) {
-    return getMockChatResponse(userMessage);
-  }
+  const history = messages
+    .filter((m): m is { role: 'user' | 'assistant'; content: string } =>
+      m.role === 'user' || m.role === 'assistant',
+    )
+    .map((m) => ({ role: m.role, content: m.content }));
 
-  const allMessages = [
-    ...messages.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-    { role: 'user' as const, content: userMessage },
-  ];
-
-  const apiUrl = IS_NVIDIA
-    ? 'https://integrate.api.nvidia.com/v1/chat/completions'
-    : 'https://api.anthropic.com/v1/messages';
-
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-
-  if (IS_NVIDIA) {
-    headers['Authorization'] = `Bearer ${AI_API_KEY}`;
-  } else {
-    headers['x-api-key'] = AI_API_KEY;
-    headers['anthropic-version'] = '2023-06-01';
-  }
-
-  const chatBody = IS_NVIDIA
-    ? JSON.stringify({
-        model: AI_MODEL,
-        max_tokens: 2048,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...allMessages,
-        ],
-      })
-    : JSON.stringify({
-        model: AI_MODEL,
-        max_tokens: 2048,
-        system: systemPrompt,
-        messages: allMessages,
-      });
-
-  const response = await fetch(apiUrl, { method: 'POST', headers, body: chatBody });
-
-  if (!response.ok) throw new Error(`AI API error: ${response.status}`);
-
-  if (IS_NVIDIA) {
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || '';
-  } else {
-    const data: AIResponse = await response.json();
-    return data.content.map((c) => c.text).join('');
-  }
+  return runTextAI({
+    name: 'chatAboutBug',
+    system: systemPrompt,
+    history,
+    user: userMessage,
+    mock: () => getMockChatResponse(userMessage),
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2236,7 +2159,7 @@ setup.afterAll(async ({ request }) => {
       },
       engineeringNotes: {
         deploymentSteps: [
-          '1. Run database migrations: npx prisma migrate deploy',
+          '1. Run database migrations: npm run db:migrate',
           '2. Set new env var: DARK_MODE_ENABLED=true',
           '3. Deploy API service first (handles both v1 and v2 during rollout)',
           '4. Deploy frontend after API is healthy',
@@ -2244,7 +2167,7 @@ setup.afterAll(async ({ request }) => {
           '6. Monitor error rates for 30 minutes post-deploy',
         ],
         migrations: [
-          { type: 'database', description: 'Add user_preferences.theme column (nullable, default null)', command: 'npx prisma migrate deploy', rollbackCommand: 'npx prisma migrate rollback --steps 1' },
+          { type: 'database', description: 'Add user_preferences.theme column (nullable, default null)', command: 'npm run db:migrate', rollbackCommand: 'Run reverse migration SQL against the database' },
           { type: 'config', description: 'Add DARK_MODE_ENABLED env var', command: 'echo "DARK_MODE_ENABLED=true" >> .env', rollbackCommand: 'Remove DARK_MODE_ENABLED from .env' },
         ],
         configChanges: [
@@ -2270,7 +2193,7 @@ setup.afterAll(async ({ request }) => {
           requiresDowntime: false,
           justification: 'Breaking API change requires coordination with API consumers. Database migration is additive (nullable column) so rollback is safe. No downtime required — v2 endpoints already existed.',
         },
-        rollbackProcedure: '1. Revert frontend to previous version\n2. Revert API to previous version (v1 endpoints will return)\n3. Rollback database migration: npx prisma migrate rollback --steps 1\n4. Remove DARK_MODE_ENABLED env var\n5. Verify health check and smoke test',
+        rollbackProcedure: '1. Revert frontend to previous version\n2. Revert API to previous version (v1 endpoints will return)\n3. Run reverse migration SQL against the database\n4. Remove DARK_MODE_ENABLED env var\n5. Verify health check and smoke test',
         markdownOutput: `# Engineering Release Notes — v3.0.0\n\n**Date:** ${d}\n**Risk:** Medium | **Rollback:** Moderate | **Downtime:** No\n\n## Deployment Steps\n1. Run migrations\n2. Set env vars\n3. Deploy API → Frontend\n4. Monitor 30min\n\n## Breaking Changes\n### Removed /api/v1/* endpoints\nMigrate to /api/v2/*. See migration guide above.\n\n## Rollback\nRevert both services, rollback migration, remove env vars.`,
       },
       customerNotes: {
