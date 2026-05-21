@@ -67,36 +67,6 @@ export interface TestCase {
   createdAt: string;
 }
 
-export interface ChatMessage {
-  id: string;
-  bugReportId: string;
-  role: 'user' | 'assistant';
-  content: string;
-  createdAt: string;
-}
-
-export interface BugCluster {
-  id: string;
-  name: string;
-  description: string | null;
-  bugCount: number;
-  createdAt: string;
-}
-
-export interface AnalyzeRequest {
-  rawInput: string;
-  screenshotBase64?: string;
-  logContent?: string;
-}
-
-export interface AnalyzeResponse {
-  bugReport: BugReport;
-  qualityScore: number;
-  duplicates: BugReport[];
-  testCases: TestCase[];
-  reproductionChecklist: string[];
-}
-
 export interface DashboardStats {
   totalBugs: number;
   criticalBugs: number;
@@ -106,14 +76,6 @@ export interface DashboardStats {
   recentBugs: BugReport[];
   trendData: { date: string; bugs: number; resolved: number }[];
   topModules: { module: string; count: number }[];
-}
-
-export interface ExportConfig {
-  platform: 'jira' | 'github';
-  bugReportId: string;
-  projectKey?: string;
-  repository?: string;
-  labels?: string[];
 }
 
 export interface ProjectSummary {

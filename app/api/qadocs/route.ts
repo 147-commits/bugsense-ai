@@ -1,26 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { generateQADocumentation } from '@/lib/ai/bugAnalyzer';
 import { requireAuth } from '@/lib/auth/requireAuth';
-import { prisma } from '@/lib/database/prisma';
+import { db } from '@/lib/database/db';
+import { generatedContent } from '@/lib/database/schema';
+import { parseBody } from '@/lib/validation';
+
+const QADocsSchema = z.object({
+  input: z.string().min(1).max(50_000),
+  docType: z
+    .enum([
+      'test_strategy',
+      'test_summary',
+      'traceability_matrix',
+      'test_closure',
+      'defect_report',
+      'test_environment',
+      'qa_checklist',
+      'test_execution_report',
+      'uat_signoff',
+      'risk_assessment',
+    ])
+    .optional()
+    .default('test_strategy'),
+  projectId: z.string().min(1).max(128).optional(),
+});
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;
 
-  try {
-    const body = await req.json();
-    const { input, docType = 'test_strategy', projectId } = body;
-    if (!input) return NextResponse.json({ error: 'input is required' }, { status: 400 });
+  const parsed = await parseBody(req, QADocsSchema);
+  if (!parsed.ok) return parsed.response;
+  const { input, docType, projectId } = parsed.data;
 
+  try {
     const result = await generateQADocumentation(input, docType);
 
-    if (projectId) {
-      await prisma.generatedContent.create({
-        data: { projectId, type: 'qadocs', input, output: result as Record<string, unknown> as Parameters<typeof prisma.generatedContent.create>[0]['data']['output'] },
+    if (projectId && db) {
+      await db.insert(generatedContent).values({
+        projectId,
+        type: 'qadocs',
+        input,
+        output: result as unknown as Record<string, unknown>,
       });
     }
 
-    return NextResponse.json(result);
+    return NextResponse.json({ ...result, demoMode: !db && !!projectId });
   } catch (error) {
     console.error('QA docs error:', error);
     return NextResponse.json({ error: 'Failed to generate documentation' }, { status: 500 });

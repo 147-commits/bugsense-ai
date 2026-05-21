@@ -1,17 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { generateTestCasesFromStory } from '@/lib/ai/bugAnalyzer';
 import { requireAuth } from '@/lib/auth/requireAuth';
-import { prisma } from '@/lib/database/prisma';
+import { db } from '@/lib/database/db';
+import { generatedContent } from '@/lib/database/schema';
+import { parseBody } from '@/lib/validation';
+
+const TestGenSchema = z.object({
+  userStory: z.string().min(1).max(10_000),
+  options: z
+    .object({
+      includeNegative: z.boolean().optional(),
+      includeEdgeCases: z.boolean().optional(),
+      includeSecurity: z.boolean().optional(),
+      includePerformance: z.boolean().optional(),
+      includeAccessibility: z.boolean().optional(),
+      framework: z.string().min(1).max(60).optional(),
+    })
+    .optional()
+    .default({}),
+  projectId: z.string().min(1).max(128).optional(),
+});
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;
 
-  try {
-    const body = await req.json();
-    const { userStory, options = {}, projectId } = body;
-    if (!userStory) return NextResponse.json({ error: 'userStory is required' }, { status: 400 });
+  const parsed = await parseBody(req, TestGenSchema);
+  if (!parsed.ok) return parsed.response;
+  const { userStory, options, projectId } = parsed.data;
 
+  try {
     const result = await generateTestCasesFromStory(userStory, {
       includeNegative: options.includeNegative ?? true,
       includeEdgeCases: options.includeEdgeCases ?? true,
@@ -21,13 +40,17 @@ export async function POST(req: NextRequest) {
       framework: options.framework || undefined,
     });
 
-    if (projectId) {
-      await prisma.generatedContent.create({
-        data: { projectId, type: 'testgen', input: userStory, output: result as unknown as Parameters<typeof prisma.generatedContent.create>[0]['data']['output'], framework: options.framework || null },
+    if (projectId && db) {
+      await db.insert(generatedContent).values({
+        projectId,
+        type: 'testgen',
+        input: userStory,
+        output: result as unknown as Record<string, unknown>,
+        framework: options.framework || null,
       });
     }
 
-    return NextResponse.json(result);
+    return NextResponse.json({ ...result, demoMode: !db && !!projectId });
   } catch (error) {
     console.error('Test gen error:', error);
     return NextResponse.json({ error: 'Failed to generate test cases' }, { status: 500 });

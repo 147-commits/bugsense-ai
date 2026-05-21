@@ -1,27 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { analyzeBug, calculateQualityScore, detectDuplicates, generateTestCases, generateReproductionChecklist } from '@/lib/ai/bugAnalyzer';
+import { eq, desc } from 'drizzle-orm';
+import { z } from 'zod';
+import {
+  analyzeBug,
+  calculateQualityScore,
+  detectDuplicates,
+  generateTestCases,
+  generateReproductionChecklist,
+} from '@/lib/ai/bugAnalyzer';
 import { validateBugAnalysis } from '@/lib/ai/validator';
 import { requireAuth } from '@/lib/auth/requireAuth';
-import { prisma } from '@/lib/database/prisma';
-import { Severity, Priority } from '@prisma/client';
+import { db } from '@/lib/database/db';
+import { bugReports } from '@/lib/database/schema';
+import { parseBody } from '@/lib/validation';
+
+type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
+type Priority = 'P0' | 'P1' | 'P2' | 'P3' | 'P4';
+
+const AnalyzeSchema = z.object({
+  rawInput: z.string().min(1).max(20_000),
+  logContent: z.string().max(100_000).optional(),
+  screenshotBase64: z.string().max(15_000_000).optional(),
+  projectId: z.string().min(1).max(128).optional(),
+});
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;
 
+  const parsed = await parseBody(req, AnalyzeSchema);
+  if (!parsed.ok) return parsed.response;
+  const { rawInput, logContent, screenshotBase64, projectId } = parsed.data;
+
   try {
-    const body = await req.json();
-    const { rawInput, logContent, screenshotBase64, projectId } = body;
-
-    if (!rawInput || typeof rawInput !== 'string') {
-      return NextResponse.json({ error: 'rawInput is required' }, { status: 400 });
-    }
-
-    // Step 1: AI Analysis
-    const rawAnalysis = await analyzeBug(rawInput, logContent, screenshotBase64 ? 'User uploaded a screenshot' : undefined);
+    const rawAnalysis = await analyzeBug(
+      rawInput,
+      logContent,
+      screenshotBase64 ? 'User uploaded a screenshot' : undefined,
+    );
     const analysis = validateBugAnalysis(rawAnalysis);
 
-    // Build bug report
     const bugReport = {
       id: `bug-${Date.now().toString(36)}`,
       rawInput,
@@ -48,33 +66,29 @@ export async function POST(req: NextRequest) {
       updatedAt: new Date().toISOString(),
     };
 
-    // Step 2: Quality Score
     const qualityResult = await calculateQualityScore(bugReport);
     bugReport.qualityScore = (qualityResult.score as number) || null;
 
-    // Step 3: Duplicate Detection — use real DB bugs if projectId provided
     let existingBugs: { id: string; title: string; description: string }[] = [];
-    if (projectId) {
-      existingBugs = await prisma.bugReport.findMany({
-        where: { projectId },
-        select: { id: true, title: true, description: true },
-        take: 50,
-        orderBy: { createdAt: 'desc' },
+    if (projectId && db) {
+      existingBugs = await db.query.bugReports.findMany({
+        where: eq(bugReports.projectId, projectId),
+        columns: { id: true, title: true, description: true },
+        orderBy: desc(bugReports.createdAt),
+        limit: 50,
       });
     }
     const duplicates = await detectDuplicates(
       { title: bugReport.title, description: bugReport.description },
-      existingBugs
+      existingBugs,
     );
 
-    // Step 4: Test Cases
     const testCases = await generateTestCases({
       title: bugReport.title,
       description: bugReport.description,
       stepsToReproduce: bugReport.stepsToReproduce,
     });
 
-    // Step 5: Reproduction Checklist
     const reproChecklist = await generateReproductionChecklist({
       title: bugReport.title,
       description: bugReport.description,
@@ -82,29 +96,26 @@ export async function POST(req: NextRequest) {
       environment: bugReport.environment,
     });
 
-    // Persist to DB if projectId provided
-    if (projectId) {
-      await prisma.bugReport.create({
-        data: {
-          projectId,
-          rawInput,
-          title: bugReport.title,
-          description: bugReport.description,
-          severity: (analysis.severity as Severity) || 'MEDIUM',
-          priority: (analysis.priority as Priority) || 'P2',
-          status: 'OPEN',
-          stepsToReproduce: bugReport.stepsToReproduce,
-          expectedResult: bugReport.expectedResult || null,
-          actualResult: bugReport.actualResult || null,
-          environment: bugReport.environment ?? undefined,
-          rootCauseHypotheses: bugReport.rootCauseHypotheses,
-          affectedModules: bugReport.affectedModules,
-          tags: bugReport.tags,
-          aiAnalysis: bugReport.aiAnalysis ?? undefined,
-          impactPrediction: bugReport.impactPrediction ?? undefined,
-          qualityScore: bugReport.qualityScore,
-          logContent: logContent || null,
-        },
+    if (projectId && db) {
+      await db.insert(bugReports).values({
+        projectId,
+        rawInput,
+        title: bugReport.title,
+        description: bugReport.description,
+        severity: ((analysis.severity as Severity) || 'MEDIUM') as Severity,
+        priority: ((analysis.priority as Priority) || 'P2') as Priority,
+        status: 'OPEN',
+        stepsToReproduce: bugReport.stepsToReproduce,
+        expectedResult: bugReport.expectedResult || null,
+        actualResult: bugReport.actualResult || null,
+        environment: bugReport.environment ?? null,
+        rootCauseHypotheses: bugReport.rootCauseHypotheses,
+        affectedModules: bugReport.affectedModules,
+        tags: bugReport.tags,
+        aiAnalysis: bugReport.aiAnalysis ?? null,
+        impactPrediction: bugReport.impactPrediction ?? null,
+        qualityScore: bugReport.qualityScore,
+        logContent: logContent || null,
       });
     }
 
@@ -114,12 +125,13 @@ export async function POST(req: NextRequest) {
       duplicates,
       testCases,
       reproductionChecklist: reproChecklist,
+      demoMode: !db && !!projectId,
     });
   } catch (error) {
     console.error('Analysis error:', error);
     return NextResponse.json(
       { error: 'Failed to analyze bug report. Please try again.' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

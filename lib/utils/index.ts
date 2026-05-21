@@ -35,17 +35,6 @@ export function severityColor(severity: string): string {
   return colors[severity] || 'badge-info';
 }
 
-export function severityDotColor(severity: string): string {
-  const colors: Record<string, string> = {
-    CRITICAL: 'bg-severity-critical',
-    HIGH: 'bg-severity-high',
-    MEDIUM: 'bg-severity-medium',
-    LOW: 'bg-severity-low',
-    INFO: 'bg-severity-info',
-  };
-  return colors[severity] || 'bg-severity-info';
-}
-
 export function priorityLabel(priority: string): string {
   const labels: Record<string, string> = {
     P0: 'Blocker',
@@ -57,25 +46,9 @@ export function priorityLabel(priority: string): string {
   return labels[priority] || priority;
 }
 
-export function truncate(str: string, length: number): string {
-  if (str.length <= length) return str;
-  return str.slice(0, length) + '...';
-}
-
-export function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).substring(2);
-}
-
 export function getQualityScoreColor(score: number): string {
   if (score >= 80) return 'text-severity-low';
   if (score >= 60) return 'text-severity-medium';
   if (score >= 40) return 'text-severity-high';
   return 'text-severity-critical';
-}
-
-export function getQualityScoreLabel(score: number): string {
-  if (score >= 80) return 'Excellent';
-  if (score >= 60) return 'Good';
-  if (score >= 40) return 'Needs Work';
-  return 'Poor';
 }

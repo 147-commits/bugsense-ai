@@ -1,36 +1,69 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { Search, Filter, X, Bug, ChevronDown } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Search, Filter, X, Bug } from 'lucide-react';
 import TopBar from '@/components/layout/TopBar';
 import BugListItem from '@/components/BugListItem';
 import BugAnalysisCard from '@/components/BugAnalysisCard';
 import QAChat from '@/components/QAChat';
-import { mockBugs as initialMockBugs } from '@/lib/utils/mockData';
-import { cn, severityColor } from '@/lib/utils';
+import { mockBugs } from '@/lib/utils/mockData';
+import { cn } from '@/lib/utils';
+import { useAppStore } from '@/lib/hooks/useStore';
 import type { BugReport, Severity, BugStatus } from '@/types';
 
 const severities: Severity[] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'];
 const statuses: BugStatus[] = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'DUPLICATE'];
 
+type BugsResponse = { bugs: BugReport[]; total: number; demoMode?: boolean };
+
 export default function BugsPage() {
+  const { currentProject } = useAppStore();
   const [search, setSearch] = useState('');
   const [filterSeverity, setFilterSeverity] = useState<Severity | ''>('');
   const [filterStatus, setFilterStatus] = useState<BugStatus | ''>('');
   const [selectedBug, setSelectedBug] = useState<BugReport | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [bugs, setBugs] = useState<BugReport[]>(initialMockBugs);
+  const [bugs, setBugs] = useState<BugReport[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [demoMode, setDemoMode] = useState(false);
+
+  const fetchBugs = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (currentProject) params.set('projectId', currentProject.id);
+      const url = params.toString() ? `/api/bugs?${params}` : '/api/bugs';
+      const res = await fetch(url);
+      if (res.ok) {
+        const data: BugsResponse = await res.json();
+        setBugs(data.bugs ?? []);
+        setDemoMode(Boolean(data.demoMode));
+      } else {
+        setBugs(mockBugs);
+        setDemoMode(true);
+      }
+    } catch {
+      setBugs(mockBugs);
+      setDemoMode(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentProject]);
+
+  useEffect(() => {
+    fetchBugs();
+  }, [fetchBugs]);
 
   const filteredBugs = useMemo(() => {
-    let result = [...bugs];
+    let result = bugs.slice();
     if (search) {
       const q = search.toLowerCase();
       result = result.filter(
         (b) =>
           b.title.toLowerCase().includes(q) ||
           b.description.toLowerCase().includes(q) ||
-          b.tags.some((t) => t.includes(q)) ||
-          b.affectedModules.some((m) => m.toLowerCase().includes(q))
+          (b.tags ?? []).some((t) => t.toLowerCase().includes(q)) ||
+          (b.affectedModules ?? []).some((m) => m.toLowerCase().includes(q)),
       );
     }
     if (filterSeverity) result = result.filter((b) => b.severity === filterSeverity);
@@ -46,18 +79,22 @@ export default function BugsPage() {
 
   const updateBugStatus = (bugId: string, newStatus: BugStatus) => {
     setBugs((prev) =>
-      prev.map((b) => (b.id === bugId ? { ...b, status: newStatus, updatedAt: new Date().toISOString() } : b))
+      prev.map((b) =>
+        b.id === bugId ? { ...b, status: newStatus, updatedAt: new Date().toISOString() } : b,
+      ),
     );
     if (selectedBug?.id === bugId) {
-      setSelectedBug((prev) => prev ? { ...prev, status: newStatus } : null);
+      setSelectedBug((prev) => (prev ? { ...prev, status: newStatus } : null));
     }
   };
 
-  const hasFilters = search || filterSeverity || filterStatus;
+  const hasFilters = !!(search || filterSeverity || filterStatus);
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    bugs.forEach((b) => { counts[b.status] = (counts[b.status] || 0) + 1; });
+    bugs.forEach((b) => {
+      counts[b.status] = (counts[b.status] ?? 0) + 1;
+    });
     return counts;
   }, [bugs]);
 
@@ -66,26 +103,42 @@ export default function BugsPage() {
       <TopBar title="Bug Database" subtitle={`${filteredBugs.length} of ${bugs.length} bugs`} />
 
       <div className="p-6 max-w-[1400px] mx-auto">
+        {demoMode && <DemoBadge />}
+
         {/* Status Quick Filters */}
         <div className="flex gap-2 mb-4 flex-wrap">
           <button
             onClick={() => setFilterStatus('')}
-            className={cn('px-3 py-1.5 rounded-lg text-xs font-medium transition-all', !filterStatus ? 'bg-accent-blue/15 text-accent-blue border border-accent-blue/30' : 'bg-bg-tertiary text-text-muted border border-border hover:text-text-secondary')}
+            className={cn(
+              'px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
+              !filterStatus
+                ? 'bg-accent-blue/15 text-accent-blue border border-accent-blue/30'
+                : 'bg-bg-tertiary text-text-muted border border-border hover:text-text-secondary',
+            )}
           >
             All ({bugs.length})
           </button>
           {statuses.map((s) => {
-            const colors: Record<string, string> = { OPEN: 'accent-blue', IN_PROGRESS: 'accent-amber', RESOLVED: 'accent-emerald', CLOSED: 'text-muted', DUPLICATE: 'accent-violet' };
+            const colors: Record<string, string> = {
+              OPEN: 'accent-blue',
+              IN_PROGRESS: 'accent-amber',
+              RESOLVED: 'accent-emerald',
+              CLOSED: 'text-muted',
+              DUPLICATE: 'accent-violet',
+            };
             const c = colors[s] || 'text-muted';
             return (
               <button
                 key={s}
                 onClick={() => setFilterStatus(filterStatus === s ? '' : s)}
-                className={cn('px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
-                  filterStatus === s ? `bg-${c}/15 text-${c} border border-${c}/30` : 'bg-bg-tertiary text-text-muted border border-border hover:text-text-secondary'
+                className={cn(
+                  'px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
+                  filterStatus === s
+                    ? `bg-${c}/15 text-${c} border border-${c}/30`
+                    : 'bg-bg-tertiary text-text-muted border border-border hover:text-text-secondary',
                 )}
               >
-                {s.replace('_', ' ')} ({statusCounts[s] || 0})
+                {s.replace('_', ' ')} ({statusCounts[s] ?? 0})
               </button>
             );
           })}
@@ -111,33 +164,50 @@ export default function BugsPage() {
                     </button>
                   )}
                 </div>
-                <button onClick={() => setShowFilters(!showFilters)} className={cn('btn-secondary px-3', showFilters && 'border-accent-blue/40 text-accent-blue')}>
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={cn('btn-secondary px-3', showFilters && 'border-accent-blue/40 text-accent-blue')}
+                >
                   <Filter className="w-4 h-4" />
                 </button>
               </div>
 
               {showFilters && (
                 <div className="flex flex-wrap gap-2 animate-slide-up">
-                  <select value={filterSeverity} onChange={(e) => setFilterSeverity(e.target.value as Severity | '')} className="bg-bg-tertiary border border-border rounded-lg px-3 py-1.5 text-xs text-text-primary outline-none">
+                  <select
+                    value={filterSeverity}
+                    onChange={(e) => setFilterSeverity(e.target.value as Severity | '')}
+                    className="bg-bg-tertiary border border-border rounded-lg px-3 py-1.5 text-xs text-text-primary outline-none"
+                  >
                     <option value="">All Severities</option>
-                    {severities.map((s) => <option key={s} value={s}>{s}</option>)}
+                    {severities.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
                   </select>
                   {hasFilters && (
-                    <button onClick={clearFilters} className="text-xs text-accent-coral hover:underline">Clear all</button>
+                    <button onClick={clearFilters} className="text-xs text-accent-coral hover:underline">
+                      Clear all
+                    </button>
                   )}
                 </div>
               )}
             </div>
 
             <div className="space-y-2">
-              {filteredBugs.length === 0 ? (
+              {loading ? (
+                <div className="glass-panel p-12 text-center text-sm text-text-muted">Loading bugs…</div>
+              ) : filteredBugs.length === 0 ? (
                 <div className="glass-panel p-12 text-center">
                   <Bug className="w-10 h-10 text-text-muted mx-auto mb-3" />
                   <p className="text-sm text-text-secondary">
                     {hasFilters ? 'No bugs match your filters' : 'No bugs found'}
                   </p>
                   {hasFilters && (
-                    <button onClick={clearFilters} className="text-xs text-accent-blue hover:underline mt-2">Clear filters</button>
+                    <button onClick={clearFilters} className="text-xs text-accent-blue hover:underline mt-2">
+                      Clear filters
+                    </button>
                   )}
                 </div>
               ) : (
@@ -154,14 +224,15 @@ export default function BugsPage() {
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-text-secondary">Bug Details</h3>
                 <div className="flex items-center gap-2">
-                  {/* Status Changer */}
                   <select
                     value={selectedBug.status}
                     onChange={(e) => updateBugStatus(selectedBug.id, e.target.value as BugStatus)}
                     className="bg-bg-tertiary border border-border rounded-lg px-3 py-1.5 text-xs text-text-primary outline-none"
                   >
                     {statuses.map((s) => (
-                      <option key={s} value={s}>{s.replace('_', ' ')}</option>
+                      <option key={s} value={s}>
+                        {s.replace('_', ' ')}
+                      </option>
                     ))}
                   </select>
                   <button onClick={() => setSelectedBug(null)} className="btn-ghost text-xs">
@@ -171,17 +242,36 @@ export default function BugsPage() {
               </div>
               <BugAnalysisCard
                 bug={selectedBug}
-                qualityScore={selectedBug.qualityScore ? {
-                  score: selectedBug.qualityScore,
-                  breakdown: { clarity: 82, reproducibility: 75, completeness: 80, technicalDetail: 70, actionability: 83 },
-                  suggestions: [],
-                } : undefined}
+                qualityScore={
+                  selectedBug.qualityScore
+                    ? {
+                        score: selectedBug.qualityScore,
+                        breakdown: {
+                          clarity: 82,
+                          reproducibility: 75,
+                          completeness: 80,
+                          technicalDetail: 70,
+                          actionability: 83,
+                        },
+                        suggestions: [],
+                      }
+                    : undefined
+                }
               />
               <QAChat bugId={selectedBug.id} bugTitle={selectedBug.title} />
             </div>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function DemoBadge() {
+  return (
+    <div className="mb-4 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-bg-tertiary text-xs text-text-muted">
+      <span className="w-1.5 h-1.5 rounded-full bg-accent-amber" />
+      Demo mode — DATABASE_URL is not configured. Showing built-in sample bugs.
     </div>
   );
 }

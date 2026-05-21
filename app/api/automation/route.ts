@@ -1,31 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { generateAutomationScript } from '@/lib/ai/bugAnalyzer';
 import { requireAuth } from '@/lib/auth/requireAuth';
-import { prisma } from '@/lib/database/prisma';
+import { db } from '@/lib/database/db';
+import { generatedContent } from '@/lib/database/schema';
+import { parseBody } from '@/lib/validation';
+
+const AutomationSchema = z.object({
+  scenario: z.string().min(1).max(10_000),
+  framework: z
+    .enum(['playwright', 'cypress', 'selenium-js', 'puppeteer', 'webdriverio'])
+    .optional()
+    .default('playwright'),
+  options: z
+    .object({
+      language: z.enum(['typescript', 'javascript']).optional(),
+      includePageObject: z.boolean().optional(),
+      includeHelpers: z.boolean().optional(),
+      includeCIConfig: z.boolean().optional(),
+    })
+    .optional()
+    .default({}),
+  projectId: z.string().min(1).max(128).optional(),
+});
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;
 
-  try {
-    const body = await req.json();
-    const { scenario, framework = 'playwright', options = {}, projectId } = body;
-    if (!scenario) return NextResponse.json({ error: 'scenario is required' }, { status: 400 });
+  const parsed = await parseBody(req, AutomationSchema);
+  if (!parsed.ok) return parsed.response;
+  const { scenario, framework, options, projectId } = parsed.data;
 
+  try {
     const result = await generateAutomationScript(scenario, framework, {
-      language: options.language || 'typescript',
+      language: options.language ?? 'typescript',
       includePageObject: options.includePageObject ?? true,
       includeHelpers: options.includeHelpers ?? true,
       includeCIConfig: options.includeCIConfig ?? false,
     });
 
-    if (projectId) {
-      await prisma.generatedContent.create({
-        data: { projectId, type: 'automation', input: scenario, output: result as unknown as Parameters<typeof prisma.generatedContent.create>[0]['data']['output'], framework, language: options.language || 'typescript' },
+    if (projectId && db) {
+      await db.insert(generatedContent).values({
+        projectId,
+        type: 'automation',
+        input: scenario,
+        output: result as unknown as Record<string, unknown>,
+        framework,
+        language: options.language ?? 'typescript',
       });
     }
 
-    return NextResponse.json(result);
+    return NextResponse.json({ ...result, demoMode: !db && !!projectId });
   } catch (error) {
     console.error('Automation error:', error);
     return NextResponse.json({ error: 'Failed to generate automation script' }, { status: 500 });

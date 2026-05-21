@@ -1,26 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { generateAPITests } from '@/lib/ai/bugAnalyzer';
 import { requireAuth } from '@/lib/auth/requireAuth';
-import { prisma } from '@/lib/database/prisma';
+import { db } from '@/lib/database/db';
+import { generatedContent } from '@/lib/database/schema';
+import { parseBody } from '@/lib/validation';
+
+const ApiTestsSchema = z.object({
+  apiDescription: z.string().min(1).max(20_000),
+  format: z
+    .enum(['postman', 'curl', 'playwright', 'cypress', 'jest', 'supertest'])
+    .optional()
+    .default('playwright'),
+  projectId: z.string().min(1).max(128).optional(),
+});
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;
 
-  try {
-    const body = await req.json();
-    const { apiDescription, format = 'playwright', projectId } = body;
-    if (!apiDescription) return NextResponse.json({ error: 'apiDescription is required' }, { status: 400 });
+  const parsed = await parseBody(req, ApiTestsSchema);
+  if (!parsed.ok) return parsed.response;
+  const { apiDescription, format, projectId } = parsed.data;
 
+  try {
     const result = await generateAPITests(apiDescription, format);
 
-    if (projectId) {
-      await prisma.generatedContent.create({
-        data: { projectId, type: 'apitests', input: apiDescription, output: result as unknown as Parameters<typeof prisma.generatedContent.create>[0]['data']['output'], framework: format },
+    if (projectId && db) {
+      await db.insert(generatedContent).values({
+        projectId,
+        type: 'apitests',
+        input: apiDescription,
+        output: result as unknown as Record<string, unknown>,
+        framework: format,
       });
     }
 
-    return NextResponse.json(result);
+    return NextResponse.json({ ...result, demoMode: !db && !!projectId });
   } catch (error) {
     console.error('API test gen error:', error);
     return NextResponse.json({ error: 'Failed to generate API tests' }, { status: 500 });

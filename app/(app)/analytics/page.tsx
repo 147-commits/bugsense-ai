@@ -1,52 +1,74 @@
 'use client';
 
-import { useState } from 'react';
-import { BarChart3, TrendingUp, Layers, Repeat, Target, Zap } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { BarChart3, Layers, Repeat, Target, TrendingUp, Zap } from 'lucide-react';
 import TopBar from '@/components/layout/TopBar';
 import { BugTrendChart, SeverityPieChart, ModuleBarChart, QualityRadarChart } from '@/components/charts/BugCharts';
-import { mockDashboardStats, mockBugs } from '@/lib/utils/mockData';
-import { cn, severityColor } from '@/lib/utils';
+import { useAppStore } from '@/lib/hooks/useStore';
+import { cn } from '@/lib/utils';
+import type { DashboardStats } from '@/types';
+
+type StatsResponse = DashboardStats & { demoMode?: boolean };
 
 export default function AnalyticsPage() {
-  const stats = mockDashboardStats;
+  const { currentProject } = useAppStore();
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [demoMode, setDemoMode] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d'>('7d');
 
-  // Compute analytics
-  const moduleFrequency = stats.topModules;
-  const severityCounts = stats.severityDistribution;
-  const totalBugs = stats.totalBugs;
-  const resolveRate = ((stats.resolvedBugs / totalBugs) * 100).toFixed(1);
+  const fetchStats = useCallback(async () => {
+    setLoading(true);
+    try {
+      const url = currentProject ? `/api/bugs/stats?projectId=${currentProject.id}` : '/api/bugs/stats';
+      const res = await fetch(url);
+      if (res.ok) {
+        const data: StatsResponse = await res.json();
+        setStats(data);
+        setDemoMode(Boolean(data.demoMode));
+      } else {
+        setStats(null);
+        setDemoMode(true);
+      }
+    } catch {
+      setStats(null);
+      setDemoMode(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentProject]);
 
-  // Mock cluster data
-  const clusters = [
-    { name: 'Authentication Issues', count: 14, bugs: ['SSO crashes', 'Token expiry', 'Session timeout'], trend: 'increasing' },
-    { name: 'Payment Processing', count: 11, bugs: ['Currency mismatch', 'Checkout errors', 'Refund failures'], trend: 'stable' },
-    { name: 'Data Display Gaps', count: 8, bugs: ['Chart empty state', 'Stale cache', 'Timezone issues'], trend: 'decreasing' },
-    { name: 'File Operations', count: 6, bugs: ['Upload failures', 'Size limits', 'Format errors'], trend: 'increasing' },
-  ];
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
 
-  // Mock recurring bugs
-  const recurringBugs = [
-    { title: 'Session timeout on idle', occurrences: 7, lastSeen: '2 days ago', module: 'Authentication' },
-    { title: 'CSV export encoding issue', occurrences: 5, lastSeen: '5 days ago', module: 'Data Export' },
-    { title: 'Search index lag', occurrences: 4, lastSeen: '1 week ago', module: 'Search' },
-    { title: 'Mobile layout break at 375px', occurrences: 3, lastSeen: '3 days ago', module: 'Responsive' },
-  ];
-
+  // The quality radar dimensions aren't tracked per-bug in v1 — derive an
+  // approximate radar from the average score so the chart isn't empty.
+  const avgScore = stats?.avgQualityScore ?? 0;
   const qualityBreakdown = {
-    clarity: 76,
-    reproducibility: 72,
-    completeness: 68,
-    technicalDetail: 64,
-    actionability: 80,
+    clarity: Math.round(avgScore * 1.05),
+    reproducibility: Math.round(avgScore * 0.95),
+    completeness: Math.round(avgScore * 0.9),
+    technicalDetail: Math.round(avgScore * 0.85),
+    actionability: Math.round(avgScore * 1.05),
   };
+
+  const totalBugs = stats?.totalBugs ?? 0;
+  const resolveRate = totalBugs > 0 ? (((stats?.resolvedBugs ?? 0) / totalBugs) * 100).toFixed(1) : '0.0';
+
+  const clusters = stats?.topModules?.slice(0, 4).map((m) => ({
+    name: `${m.module} bugs`,
+    count: m.count,
+    trend: 'stable' as const,
+  })) ?? [];
 
   return (
     <div className="min-h-screen">
       <TopBar title="QA Insights" subtitle="Defect pattern analysis & intelligence" />
 
       <div className="p-6 space-y-6 max-w-[1400px] mx-auto">
-        {/* Time Range Selector */}
+        {demoMode && <DemoBadge />}
+
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">
             <BarChart3 className="w-4 h-4 text-accent-violet" />
@@ -59,7 +81,7 @@ export default function AnalyticsPage() {
                 onClick={() => setTimeRange(range)}
                 className={cn(
                   'px-3 py-1.5 rounded-lg text-xs font-medium transition-all',
-                  timeRange === range ? 'bg-bg-hover text-text-primary' : 'text-text-muted hover:text-text-secondary'
+                  timeRange === range ? 'bg-bg-hover text-text-primary' : 'text-text-muted hover:text-text-secondary',
                 )}
               >
                 {range === '7d' ? '7 Days' : range === '30d' ? '30 Days' : '90 Days'}
@@ -72,15 +94,15 @@ export default function AnalyticsPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             { label: 'Resolution Rate', value: `${resolveRate}%`, icon: Target, color: 'accent-emerald' },
-            { label: 'Avg Quality Score', value: stats.avgQualityScore.toFixed(1), icon: Zap, color: 'accent-amber' },
-            { label: 'Duplicate Rate', value: '12.4%', icon: Repeat, color: 'accent-violet' },
-            { label: 'Active Clusters', value: clusters.length.toString(), icon: Layers, color: 'accent-cyan' },
+            { label: 'Avg Quality Score', value: avgScore.toFixed(1), icon: Zap, color: 'accent-amber' },
+            { label: 'Total Bugs', value: String(totalBugs), icon: BarChart3, color: 'accent-violet' },
+            { label: 'Top Modules', value: String(stats?.topModules?.length ?? 0), icon: Layers, color: 'accent-cyan' },
           ].map((m) => (
             <div key={m.label} className="stat-card">
               <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center mb-3', `bg-${m.color}/10`)}>
                 <m.icon className={cn('w-4 h-4', `text-${m.color}`)} />
               </div>
-              <p className="text-xl font-bold text-text-primary font-mono">{m.value}</p>
+              <p className="text-xl font-bold text-text-primary font-mono">{loading ? '—' : m.value}</p>
               <p className="text-xs text-text-muted">{m.label}</p>
             </div>
           ))}
@@ -88,91 +110,90 @@ export default function AnalyticsPage() {
 
         {/* Charts Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Trend */}
           <div className="glass-panel p-6">
             <h4 className="text-sm font-semibold text-text-primary mb-4">Bug Trend</h4>
-            <BugTrendChart data={stats.trendData} />
+            {stats?.trendData?.length ? (
+              <BugTrendChart data={stats.trendData} />
+            ) : (
+              <div className="h-[240px] flex items-center justify-center text-xs text-text-muted">
+                {loading ? 'Loading…' : 'No trend data yet'}
+              </div>
+            )}
           </div>
 
-          {/* Severity */}
           <div className="glass-panel p-6">
             <h4 className="text-sm font-semibold text-text-primary mb-4">Severity Distribution</h4>
-            <SeverityPieChart data={severityCounts} />
+            {stats?.severityDistribution?.length ? (
+              <SeverityPieChart data={stats.severityDistribution} />
+            ) : (
+              <div className="h-[240px] flex items-center justify-center text-xs text-text-muted">
+                {loading ? 'Loading…' : 'No severity data'}
+              </div>
+            )}
           </div>
 
-          {/* Module Heatmap */}
           <div className="glass-panel p-6">
             <h4 className="text-sm font-semibold text-text-primary mb-4">Module Defect Heatmap</h4>
-            <ModuleBarChart data={moduleFrequency} />
+            {stats?.topModules?.length ? (
+              <ModuleBarChart data={stats.topModules} />
+            ) : (
+              <div className="h-[280px] flex items-center justify-center text-xs text-text-muted">
+                {loading ? 'Loading…' : 'No module data — analyse some bugs to populate this chart.'}
+              </div>
+            )}
           </div>
 
-          {/* Quality Radar */}
           <div className="glass-panel p-6">
             <h4 className="text-sm font-semibold text-text-primary mb-4">Avg Report Quality Breakdown</h4>
             <QualityRadarChart data={qualityBreakdown} />
           </div>
         </div>
 
-        {/* Bug Clusters */}
-        <div className="glass-panel p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Layers className="w-4 h-4 text-accent-cyan" />
-            <h4 className="text-sm font-semibold text-text-primary">AI Bug Clusters</h4>
-            <span className="text-xs text-text-muted ml-auto">Auto-grouped by AI similarity</span>
+        {/* Module clusters (derived from real topModules) */}
+        {clusters.length > 0 && (
+          <div className="glass-panel p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Layers className="w-4 h-4 text-accent-cyan" />
+              <h4 className="text-sm font-semibold text-text-primary">Top Affected Modules</h4>
+              <span className="text-xs text-text-muted ml-auto">From {totalBugs} bugs</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {clusters.map((cluster) => (
+                <div key={cluster.name} className="p-4 rounded-xl bg-bg-tertiary border border-border">
+                  <div className="flex items-center justify-between mb-2">
+                    <h5 className="text-sm font-semibold text-text-primary">{cluster.name}</h5>
+                    <span className="text-xs font-mono text-text-muted">{cluster.count} bugs</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <TrendingUp className="w-3 h-3 text-text-muted" />
+                    <span className="text-[10px] capitalize text-text-muted">{cluster.trend}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {clusters.map((cluster) => (
-              <div key={cluster.name} className="p-4 rounded-xl bg-bg-tertiary border border-border hover:border-border-light transition-all">
-                <div className="flex items-center justify-between mb-2">
-                  <h5 className="text-sm font-semibold text-text-primary">{cluster.name}</h5>
-                  <span className="text-xs font-mono text-text-muted">{cluster.count} bugs</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5 mb-3">
-                  {cluster.bugs.map((b) => (
-                    <span key={b} className="text-[10px] px-2 py-0.5 rounded-full bg-bg-hover text-text-secondary">{b}</span>
-                  ))}
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <TrendingUp className={cn('w-3 h-3', cluster.trend === 'increasing' ? 'text-accent-coral' : cluster.trend === 'decreasing' ? 'text-accent-emerald' : 'text-text-muted')} />
-                  <span className={cn('text-[10px] capitalize', cluster.trend === 'increasing' ? 'text-accent-coral' : cluster.trend === 'decreasing' ? 'text-accent-emerald' : 'text-text-muted')}>
-                    {cluster.trend}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        )}
 
-        {/* Recurring Bugs */}
+        {/* Recurring bugs placeholder — needs occurrence tracking on schema */}
         <div className="glass-panel p-6">
           <div className="flex items-center gap-2 mb-4">
             <Repeat className="w-4 h-4 text-accent-amber" />
             <h4 className="text-sm font-semibold text-text-primary">Recurring Bugs</h4>
           </div>
-          <div className="space-y-2">
-            {recurringBugs.map((bug) => (
-              <div key={bug.title} className="flex items-center gap-4 p-3 rounded-xl bg-bg-tertiary hover:bg-bg-hover transition-colors">
-                <div className="w-10 h-10 rounded-lg bg-accent-amber/10 flex items-center justify-center flex-shrink-0">
-                  <span className="text-sm font-bold text-accent-amber font-mono">{bug.occurrences}x</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-text-primary truncate">{bug.title}</p>
-                  <div className="flex items-center gap-3 mt-0.5">
-                    <span className="text-[10px] text-text-muted">{bug.module}</span>
-                    <span className="text-[10px] text-text-muted">Last: {bug.lastSeen}</span>
-                  </div>
-                </div>
-                <div className="h-1.5 w-24 bg-bg-primary rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-accent-amber rounded-full"
-                    style={{ width: `${(bug.occurrences / 7) * 100}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
+          <p className="text-xs text-text-muted">
+            Recurring bug detection requires occurrence tracking — coming once bugs accumulate enough history.
+          </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+function DemoBadge() {
+  return (
+    <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-bg-tertiary text-xs text-text-muted">
+      <span className="w-1.5 h-1.5 rounded-full bg-accent-amber" />
+      Demo mode — DATABASE_URL is not configured. Showing built-in sample analytics.
     </div>
   );
 }

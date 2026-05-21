@@ -1,6 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { eq, and, desc, inArray, sql } from 'drizzle-orm';
+import { z } from 'zod';
 import { requireAuth } from '@/lib/auth/requireAuth';
-import { prisma } from '@/lib/database/prisma';
+import { db } from '@/lib/database/db';
+import {
+  projects,
+  projectMembers,
+  bugReports,
+  generatedContent,
+} from '@/lib/database/schema';
+import { parseParams, parseQuery } from '@/lib/validation';
+
+const ParamsSchema = z.object({
+  id: z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/),
+});
+
+const QuerySchema = z.object({
+  type: z
+    .enum([
+      'all',
+      'bugs',
+      'documents',
+      'testgen',
+      'apitests',
+      'automation',
+      'testdata',
+      'testplan',
+      'releasenotes',
+      'qadocs',
+      'coverage',
+    ])
+    .optional(),
+});
 
 type Ctx = { params: { id: string } };
 
@@ -8,53 +39,81 @@ export async function GET(req: NextRequest, { params }: Ctx) {
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;
 
-  const { searchParams } = new URL(req.url);
-  const type = searchParams.get('type'); // optional filter
+  const paramsParsed = parseParams(params, ParamsSchema);
+  if (!paramsParsed.ok) return paramsParsed.response;
+  const queryParsed = parseQuery(req, QuerySchema);
+  if (!queryParsed.ok) return queryParsed.response;
 
-  const projectId = params.id;
+  const projectId = paramsParsed.data.id;
+  const type = queryParsed.data.type;
 
-  // Verify project exists
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    include: { _count: { select: { bugReports: true, members: true } } },
-  });
+  if (!db) {
+    return NextResponse.json({
+      project: null,
+      generatedContent: [],
+      bugReports: [],
+      demoMode: true,
+    });
+  }
+
+  const project = await db.query.projects.findFirst({ where: eq(projects.id, projectId) });
   if (!project) {
     return NextResponse.json({ error: 'Project not found' }, { status: 404 });
   }
+  const [bugRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(bugReports)
+    .where(eq(bugReports.projectId, projectId));
+  const [memberRow] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(projectMembers)
+    .where(eq(projectMembers.projectId, projectId));
 
-  const gcWhere: Record<string, unknown> = { projectId };
-  if (type && type !== 'all' && type !== 'bugs') {
-    // "documents" is a virtual tab grouping multiple types
+  const projectWithCounts = {
+    ...project,
+    _count: {
+      bugReports: Number(bugRow?.count ?? 0),
+      members: Number(memberRow?.count ?? 0),
+    },
+  };
+
+  const skipGc = type === 'bugs';
+  const skipBugs = !!(type && type !== 'all' && type !== 'bugs');
+
+  const gcWhere = (() => {
     if (type === 'documents') {
-      gcWhere.type = { in: ['testplan', 'releasenotes', 'qadocs'] };
-    } else {
-      gcWhere.type = type;
+      return and(
+        eq(generatedContent.projectId, projectId),
+        inArray(generatedContent.type, ['testplan', 'releasenotes', 'qadocs']),
+      );
     }
-  }
+    if (type && type !== 'all' && type !== 'bugs') {
+      return and(eq(generatedContent.projectId, projectId), eq(generatedContent.type, type));
+    }
+    return eq(generatedContent.projectId, projectId);
+  })();
 
-  const [generatedContent, bugReports] = await Promise.all([
-    // Skip GC query if only bugs requested
-    type === 'bugs'
+  const [gc, bugs] = await Promise.all([
+    skipGc
       ? Promise.resolve([])
-      : prisma.generatedContent.findMany({
+      : db.query.generatedContent.findMany({
           where: gcWhere,
-          orderBy: { createdAt: 'desc' },
-          take: 200,
+          orderBy: desc(generatedContent.createdAt),
+          limit: 200,
         }),
-    // Skip bugs query if a specific GC type requested
-    type && type !== 'all' && type !== 'bugs'
+    skipBugs
       ? Promise.resolve([])
-      : prisma.bugReport.findMany({
-          where: { projectId },
-          orderBy: { createdAt: 'desc' },
-          take: 200,
-          include: { testCases: { take: 5 } },
+      : db.query.bugReports.findMany({
+          where: eq(bugReports.projectId, projectId),
+          orderBy: desc(bugReports.createdAt),
+          limit: 200,
+          with: { testCases: { limit: 5 } },
         }),
   ]);
 
   return NextResponse.json({
-    project,
-    generatedContent,
-    bugReports,
+    project: projectWithCounts,
+    generatedContent: gc,
+    bugReports: bugs,
   });
 }

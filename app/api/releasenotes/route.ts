@@ -1,26 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { generateReleaseNotes } from '@/lib/ai/bugAnalyzer';
 import { requireAuth } from '@/lib/auth/requireAuth';
-import { prisma } from '@/lib/database/prisma';
+import { db } from '@/lib/database/db';
+import { generatedContent } from '@/lib/database/schema';
+import { parseBody } from '@/lib/validation';
+
+const ReleaseNotesSchema = z.object({
+  input: z.string().min(1).max(50_000),
+  format: z
+    .enum(['standard', 'technical', 'user-facing', 'changelog', 'slack'])
+    .optional()
+    .default('standard'),
+  projectId: z.string().min(1).max(128).optional(),
+});
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;
 
-  try {
-    const body = await req.json();
-    const { input, format = 'standard', projectId } = body;
-    if (!input) return NextResponse.json({ error: 'input is required' }, { status: 400 });
+  const parsed = await parseBody(req, ReleaseNotesSchema);
+  if (!parsed.ok) return parsed.response;
+  const { input, format, projectId } = parsed.data;
 
+  try {
     const result = await generateReleaseNotes(input, format);
 
-    if (projectId) {
-      await prisma.generatedContent.create({
-        data: { projectId, type: 'releasenotes', input, output: result as unknown as Parameters<typeof prisma.generatedContent.create>[0]['data']['output'] },
+    if (projectId && db) {
+      await db.insert(generatedContent).values({
+        projectId,
+        type: 'releasenotes',
+        input,
+        output: result as unknown as Record<string, unknown>,
       });
     }
 
-    return NextResponse.json(result);
+    return NextResponse.json({ ...result, demoMode: !db && !!projectId });
   } catch (error) {
     console.error('Release notes error:', error);
     return NextResponse.json({ error: 'Failed to generate release notes' }, { status: 500 });

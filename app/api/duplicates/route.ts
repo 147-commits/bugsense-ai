@@ -1,34 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { eq, desc } from 'drizzle-orm';
+import { z } from 'zod';
 import { detectDuplicates } from '@/lib/ai/bugAnalyzer';
 import { requireAuth } from '@/lib/auth/requireAuth';
-import { prisma } from '@/lib/database/prisma';
+import { db } from '@/lib/database/db';
+import { bugReports } from '@/lib/database/schema';
+import { parseBody } from '@/lib/validation';
+
+const DuplicatesSchema = z.object({
+  title: z.string().min(1).max(500),
+  description: z.string().min(1).max(20_000),
+  projectId: z.string().min(1).max(128).optional(),
+});
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;
 
+  const parsed = await parseBody(req, DuplicatesSchema);
+  if (!parsed.ok) return parsed.response;
+  const { title, description, projectId } = parsed.data;
+
   try {
-    const body = await req.json();
-    const { title, description, projectId } = body;
-
-    if (!title || !description) {
-      return NextResponse.json({ error: 'title and description are required' }, { status: 400 });
+    let existingBugs: { id: string; title: string; description: string }[] = [];
+    if (db) {
+      existingBugs = await db.query.bugReports.findMany({
+        where: projectId ? eq(bugReports.projectId, projectId) : undefined,
+        columns: { id: true, title: true, description: true },
+        orderBy: desc(bugReports.createdAt),
+        limit: 50,
+      });
     }
-
-    // Pull existing bugs from DB for comparison
-    const where: Record<string, unknown> = {};
-    if (projectId) where.projectId = projectId;
-
-    const existingBugs = await prisma.bugReport.findMany({
-      where,
-      select: { id: true, title: true, description: true },
-      take: 50,
-      orderBy: { createdAt: 'desc' },
-    });
 
     const result = await detectDuplicates({ title, description }, existingBugs);
 
-    return NextResponse.json(result);
+    return NextResponse.json({ ...result, demoMode: !db });
   } catch (error) {
     console.error('Duplicate detection error:', error);
     return NextResponse.json({ error: 'Failed to detect duplicates' }, { status: 500 });

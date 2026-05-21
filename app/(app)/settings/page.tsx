@@ -6,7 +6,6 @@ import TopBar from '@/components/layout/TopBar';
 import { cn } from '@/lib/utils';
 
 export default function SettingsPage() {
-  const [aiProvider, setAiProvider] = useState('anthropic');
   const [notifications, setNotifications] = useState(true);
   const [autoAnalyze, setAutoAnalyze] = useState(true);
   const [duplicateThreshold, setDuplicateThreshold] = useState(60);
@@ -48,14 +47,10 @@ export default function SettingsPage() {
           <div className="space-y-4">
             <div>
               <label className="text-xs font-medium text-text-secondary mb-1.5 block">AI Provider</label>
-              <select
-                value={aiProvider}
-                onChange={(e) => setAiProvider(e.target.value)}
-                className="input-field text-sm"
-              >
-                <option value="anthropic">Anthropic (Claude)</option>
-                <option value="openai">OpenAI (GPT-4)</option>
-              </select>
+              <div className="input-field text-sm flex items-center justify-between">
+                <span>Anthropic (Claude)</span>
+                <span className="text-[10px] text-text-muted">Only provider supported in v1</span>
+              </div>
             </div>
 
             <div>

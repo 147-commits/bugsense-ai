@@ -12,51 +12,6 @@ export function Skeleton({ className }: { className?: string }) {
   return <div className={cn('bg-bg-tertiary rounded-lg animate-pulse', className)} />;
 }
 
-export function CardSkeleton() {
-  return (
-    <div className="glass-panel p-5 space-y-3">
-      <Skeleton className="h-4 w-3/4" />
-      <Skeleton className="h-3 w-full" />
-      <Skeleton className="h-3 w-5/6" />
-    </div>
-  );
-}
-
-export function AnalysisSkeleton() {
-  return (
-    <div className="space-y-4">
-      <div className="glass-panel p-5 space-y-3">
-        <Skeleton className="h-5 w-2/3" />
-        <Skeleton className="h-16 w-full" />
-        <div className="grid grid-cols-2 gap-3">
-          <Skeleton className="h-10" />
-          <Skeleton className="h-10" />
-        </div>
-      </div>
-      <div className="glass-panel p-5 space-y-2">
-        <Skeleton className="h-4 w-40" />
-        {[1, 2, 3].map((i) => <Skeleton key={i} className="h-6 w-full" />)}
-      </div>
-    </div>
-  );
-}
-
-export function ProgressBar({ progress, label }: { progress: number; label?: string }) {
-  return (
-    <div className="space-y-1.5">
-      {label && (
-        <div className="flex justify-between text-xs">
-          <span className="text-text-secondary">{label}</span>
-          <span className="text-text-muted font-mono">{Math.round(progress)}%</span>
-        </div>
-      )}
-      <div className="h-1 bg-bg-tertiary rounded-full overflow-hidden">
-        <div className="h-full bg-accent rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
-      </div>
-    </div>
-  );
-}
-
 export function AnalysisProgress({ stage }: { stage: string }) {
   const stages = [
     { key: 'parsing', label: 'Parsing Input' },

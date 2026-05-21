@@ -99,14 +99,3 @@ export function QualityRadarChart({ data }: { data: Record<string, number> }) {
   );
 }
 
-// Mini Sparkline — kept for backward compat but simplified
-export function Sparkline({ data, color = '#3b82f6', height = 40 }: { data: number[]; color?: string; height?: number }) {
-  const chartData = data.map((val, i) => ({ x: i, y: val }));
-  return (
-    <ResponsiveContainer width="100%" height={height}>
-      <LineChart data={chartData} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
-        <Line type="monotone" dataKey="y" stroke={color} strokeWidth={1.5} dot={false} />
-      </LineChart>
-    </ResponsiveContainer>
-  );
-}
