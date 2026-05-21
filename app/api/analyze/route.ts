@@ -12,6 +12,7 @@ import { validateBugAnalysis } from '@/lib/ai/validator';
 import { requireAuth } from '@/lib/auth/requireAuth';
 import { db } from '@/lib/database/db';
 import { bugReports } from '@/lib/database/schema';
+import { tryPushBugToJira } from '@/lib/jira/sync-out';
 import { parseBody } from '@/lib/validation';
 
 type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
@@ -96,27 +97,38 @@ export async function POST(req: NextRequest) {
       environment: bugReport.environment,
     });
 
+    let persistedBugId: string | null = null;
     if (projectId && db) {
-      await db.insert(bugReports).values({
-        projectId,
-        rawInput,
-        title: bugReport.title,
-        description: bugReport.description,
-        severity: ((analysis.severity as Severity) || 'MEDIUM') as Severity,
-        priority: ((analysis.priority as Priority) || 'P2') as Priority,
-        status: 'OPEN',
-        stepsToReproduce: bugReport.stepsToReproduce,
-        expectedResult: bugReport.expectedResult || null,
-        actualResult: bugReport.actualResult || null,
-        environment: bugReport.environment ?? null,
-        rootCauseHypotheses: bugReport.rootCauseHypotheses,
-        affectedModules: bugReport.affectedModules,
-        tags: bugReport.tags,
-        aiAnalysis: bugReport.aiAnalysis ?? null,
-        impactPrediction: bugReport.impactPrediction ?? null,
-        qualityScore: bugReport.qualityScore,
-        logContent: logContent || null,
-      });
+      const [inserted] = await db
+        .insert(bugReports)
+        .values({
+          projectId,
+          rawInput,
+          title: bugReport.title,
+          description: bugReport.description,
+          severity: ((analysis.severity as Severity) || 'MEDIUM') as Severity,
+          priority: ((analysis.priority as Priority) || 'P2') as Priority,
+          status: 'OPEN',
+          stepsToReproduce: bugReport.stepsToReproduce,
+          expectedResult: bugReport.expectedResult || null,
+          actualResult: bugReport.actualResult || null,
+          environment: bugReport.environment ?? null,
+          rootCauseHypotheses: bugReport.rootCauseHypotheses,
+          affectedModules: bugReport.affectedModules,
+          tags: bugReport.tags,
+          aiAnalysis: bugReport.aiAnalysis ?? null,
+          impactPrediction: bugReport.impactPrediction ?? null,
+          qualityScore: bugReport.qualityScore,
+          logContent: logContent || null,
+        })
+        .returning({ id: bugReports.id });
+      persistedBugId = inserted?.id ?? null;
+    }
+
+    let jiraSync: { jiraIssueKey: string; created: boolean } | null = null;
+    if (persistedBugId) {
+      const result = await tryPushBugToJira(persistedBugId, { siteOrigin: req.nextUrl.origin });
+      if (result) jiraSync = { jiraIssueKey: result.jiraIssueKey, created: result.created };
     }
 
     return NextResponse.json({
@@ -125,6 +137,7 @@ export async function POST(req: NextRequest) {
       duplicates,
       testCases,
       reproductionChecklist: reproChecklist,
+      jiraSync,
       demoMode: !db && !!projectId,
     });
   } catch (error) {
