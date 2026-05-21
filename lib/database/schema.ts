@@ -15,6 +15,7 @@ export const bugStatusEnum = pgEnum('BugStatus', ['OPEN', 'IN_PROGRESS', 'RESOLV
 export const memberRoleEnum = pgEnum('MemberRole', ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']);
 export const planTierEnum = pgEnum('PlanTier', ['FREE', 'PRO', 'ENTERPRISE']);
 export const integrationTypeEnum = pgEnum('IntegrationType', ['GITHUB', 'JIRA', 'LINEAR', 'SLACK', 'WEBHOOK']);
+export const verdictEnum = pgEnum('Verdict', ['GO', 'CAUTION', 'NO_GO']);
 
 // ─── Multi-tenancy Tables ─────────────────────────────────────────────────────
 
@@ -205,6 +206,23 @@ export const generatedContent = pgTable('GeneratedContent', {
   createdAtIdx: index('GeneratedContent_createdAt_idx').on(t.createdAt),
 }));
 
+export const releaseReadinessSnapshots = pgTable('ReleaseReadinessSnapshot', {
+  id: varchar('id').primaryKey().$defaultFn(cuid),
+  projectId: varchar('projectId').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  score: integer('score').notNull(),
+  verdict: verdictEnum('verdict').notNull(),
+  breakdown: jsonb('breakdown').notNull(),
+  blockers: jsonb('blockers').notNull(),
+  createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
+}, (t) => ({
+  projectIdx: index('ReleaseReadinessSnapshot_projectId_idx').on(t.projectId),
+  createdAtIdx: index('ReleaseReadinessSnapshot_createdAt_idx').on(t.createdAt),
+}));
+
+export const releaseReadinessSnapshotsRelations = relations(releaseReadinessSnapshots, ({ one }) => ({
+  project: one(projects, { fields: [releaseReadinessSnapshots.projectId], references: [projects.id] }),
+}));
+
 export const analyticsSnapshots = pgTable('AnalyticsSnapshot', {
   id: varchar('id').primaryKey().$defaultFn(cuid),
   date: timestamp('date', { mode: 'date' }).notNull().defaultNow(),
@@ -249,6 +267,7 @@ export const projectsRelations = relations(projects, ({ one, many }) => ({
   generatedContent: many(generatedContent),
   usageLogs: many(usageLogs),
   integrations: many(integrations),
+  releaseReadinessSnapshots: many(releaseReadinessSnapshots),
 }));
 
 export const projectMembersRelations = relations(projectMembers, ({ one }) => ({
@@ -306,3 +325,5 @@ export type NewGeneratedContent = typeof generatedContent.$inferInsert;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type UsageLog = typeof usageLogs.$inferSelect;
 export type NewUsageLog = typeof usageLogs.$inferInsert;
+export type ReleaseReadinessSnapshot = typeof releaseReadinessSnapshots.$inferSelect;
+export type NewReleaseReadinessSnapshot = typeof releaseReadinessSnapshots.$inferInsert;

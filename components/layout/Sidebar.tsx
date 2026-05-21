@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Search, Bug, BarChart3, Settings,
   ChevronLeft, ChevronRight,
   FileText, Globe, ScrollText, Database, ClipboardList, Code2,
-  BookOpen, Shield, FolderOpen, History,
+  BookOpen, Shield, FolderOpen, History, Rocket,
 } from 'lucide-react';
 import { useAppStore } from '@/lib/hooks/useStore';
 import { cn } from '@/lib/utils';
@@ -17,6 +17,7 @@ const navSections = [
     items: [
       { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
       { href: '/projects', icon: FolderOpen, label: 'Projects' },
+      { href: '/readiness', icon: Rocket, label: 'Release Readiness' },
       { href: '/bugs', icon: Bug, label: 'Bug Database' },
       { href: '/analytics', icon: BarChart3, label: 'QA Insights' },
       { href: '/history', icon: History, label: 'History' },
