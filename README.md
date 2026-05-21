@@ -7,7 +7,7 @@ BugSense AI transforms messy bug reports into structured, actionable engineering
 ![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue?logo=typescript)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38bdf8?logo=tailwindcss)
-![Prisma](https://img.shields.io/badge/Prisma-5.22-2d3748?logo=prisma)
+![Drizzle](https://img.shields.io/badge/Drizzle-0.45-c5f74f?logo=drizzle)
 ![Claude AI](https://img.shields.io/badge/Claude-Sonnet-cc785c?logo=anthropic)
 
 ---
@@ -48,8 +48,8 @@ BugSense AI transforms messy bug reports into structured, actionable engineering
 | **Framework** | Next.js 14 (App Router) |
 | **Language** | TypeScript |
 | **Styling** | Tailwind CSS |
-| **Database** | PostgreSQL + Prisma ORM |
-| **AI** | Anthropic Claude API (with OpenAI fallback support) |
+| **Database** | Neon Postgres + Drizzle ORM |
+| **AI** | Anthropic Claude API |
 | **Charts** | Recharts |
 | **State** | Zustand |
 | **Deployment** | Vercel |
@@ -91,9 +91,9 @@ DATABASE_URL=postgresql://user:password@localhost:5432/bugsense
 ### 3. Database Setup (Optional)
 
 ```bash
-npx prisma generate
-npx prisma db push
-npx prisma db seed
+npm run db:generate   # generate SQL migrations from lib/database/schema.ts
+npm run db:migrate    # apply migrations to the database
+npm run db:studio     # open Drizzle Studio to inspect data
 ```
 
 ### 4. Run Development Server
@@ -126,60 +126,99 @@ Your app will be live at `your-project.vercel.app`
 ```
 bugsense-ai/
 ├── app/
-│   ├── (app)/                    # App routes with sidebar layout
-│   │   ├── dashboard/page.tsx    # Main dashboard with stats & charts
-│   │   ├── analyze/page.tsx      # Bug analyzer with AI form
-│   │   ├── bugs/page.tsx         # Bug database with search & filters
-│   │   ├── analytics/page.tsx    # QA insights & pattern analysis
-│   │   ├── settings/page.tsx     # Configuration & integrations
-│   │   └── layout.tsx            # App shell with sidebar
+│   ├── (app)/                          # Authenticated app routes (sidebar layout)
+│   │   ├── analytics/page.tsx          # QA insights & pattern analysis
+│   │   ├── analyze/page.tsx            # Bug analyzer with AI form
+│   │   ├── apitests/page.tsx           # API test suite generator
+│   │   ├── automation/page.tsx         # UI automation script generator
+│   │   ├── bugs/page.tsx               # Bug database with search & filters
+│   │   ├── coverage/page.tsx           # Coverage gap analyser
+│   │   ├── dashboard/page.tsx          # Main dashboard with stats & charts
+│   │   ├── history/page.tsx            # Past generations & analyses
+│   │   ├── projects/page.tsx           # Project CRUD
+│   │   ├── projects/[id]/page.tsx      # Project detail with content tabs
+│   │   ├── qadocs/page.tsx             # QA documentation generator
+│   │   ├── releasenotes/page.tsx       # Release notes generator
+│   │   ├── settings/page.tsx           # Configuration & integrations
+│   │   ├── testdata/page.tsx           # Test data generator
+│   │   ├── testgen/page.tsx            # Test case generator from user stories
+│   │   ├── testplan/page.tsx           # Sprint test plan generator
+│   │   └── layout.tsx                  # App shell wrapper
+│   ├── (auth)/                         # Sign-in / sign-up (centered shell)
+│   │   ├── login/page.tsx
+│   │   ├── register/page.tsx
+│   │   └── layout.tsx
 │   ├── api/
-│   │   ├── analyze/route.ts      # POST — Full AI bug analysis pipeline
-│   │   ├── bugs/route.ts         # GET — List & filter bugs
-│   │   ├── bugs/stats/route.ts   # GET — Dashboard statistics
-│   │   ├── chat/route.ts         # POST — QA assistant chat
-│   │   ├── duplicates/route.ts   # POST — Duplicate detection
-│   │   ├── export/route.ts       # POST — Jira/GitHub export
-│   │   ├── quality-score/route.ts # POST — Report quality scoring
-│   │   ├── testcases/route.ts    # POST — Test case generation
-│   │   └── health/route.ts       # GET — Health check
-│   ├── layout.tsx                # Root layout
-│   └── page.tsx                  # Redirect to /dashboard
+│   │   ├── analyze/route.ts            # POST — Full AI bug analysis pipeline
+│   │   ├── apitests/route.ts           # POST — Generate API tests
+│   │   ├── auth/
+│   │   │   ├── [...nextauth]/route.ts  # NextAuth handler
+│   │   │   └── register/route.ts       # POST — Sign-up
+│   │   ├── automation/route.ts         # POST — Generate automation project
+│   │   ├── bugs/route.ts               # GET — List & filter bugs
+│   │   ├── bugs/stats/route.ts         # GET — Dashboard statistics
+│   │   ├── chat/route.ts               # POST — QA assistant chat
+│   │   ├── coverage/route.ts           # POST — Expand test coverage
+│   │   ├── duplicates/route.ts         # POST — Duplicate detection
+│   │   ├── export/route.ts             # POST — Jira/GitHub export
+│   │   ├── health/route.ts             # GET — Health check
+│   │   ├── history/route.ts            # GET — Project timeline
+│   │   ├── projects/route.ts           # GET/POST — Projects
+│   │   ├── projects/[id]/route.ts      # PATCH/DELETE — Single project
+│   │   ├── projects/[id]/content/route.ts  # GET — Project content
+│   │   ├── qadocs/route.ts             # POST — QA documentation
+│   │   ├── releasenotes/route.ts       # POST — Release notes
+│   │   ├── testdata/route.ts           # POST — Test data generation
+│   │   ├── testgen/route.ts            # POST — Test cases from user stories
+│   │   └── testplan/route.ts           # POST — Sprint test plan
+│   ├── layout.tsx                      # Root layout
+│   ├── providers.tsx                   # NextAuth SessionProvider
+│   ├── not-found.tsx                   # 404 page
+│   └── page.tsx                        # Redirect to /dashboard
 ├── components/
 │   ├── layout/
-│   │   ├── AppShell.tsx          # Main layout wrapper
-│   │   ├── Sidebar.tsx           # Navigation sidebar
-│   │   └── TopBar.tsx            # Top header bar
+│   │   ├── AppShell.tsx                # Main layout wrapper
+│   │   ├── Sidebar.tsx                 # Navigation sidebar
+│   │   └── TopBar.tsx                  # Top header bar
 │   ├── charts/
-│   │   └── BugCharts.tsx         # All chart components (Recharts)
+│   │   └── BugCharts.tsx               # Chart components (Recharts)
 │   ├── ui/
-│   │   └── Loading.tsx           # Spinners, skeletons, progress bars
-│   ├── BugForm.tsx               # Bug submission form
-│   ├── BugAnalysisCard.tsx       # AI analysis output display
-│   ├── BugListItem.tsx           # Bug list row component
-│   └── QAChat.tsx                # AI chat assistant
+│   │   ├── AIDisclaimer.tsx            # AI confidence badge / disclaimer
+│   │   ├── CodeBlock.tsx               # Syntax-highlighted code block
+│   │   ├── Feedback.tsx                # Thumbs up/down feedback widget
+│   │   └── Loading.tsx                 # Spinners, skeletons, progress bars
+│   ├── BugAnalysisCard.tsx             # AI analysis output display
+│   ├── BugForm.tsx                     # Bug submission form
+│   ├── BugListItem.tsx                 # Bug list row component
+│   ├── GeneratorPage.tsx               # Shared shell for generator pages
+│   └── QAChat.tsx                      # AI chat assistant
 ├── lib/
 │   ├── ai/
-│   │   └── bugAnalyzer.ts        # All AI functions + prompts + mock fallbacks
+│   │   ├── bugAnalyzer.ts              # All AI functions + prompts + mock fallbacks
+│   │   └── validator.ts                # Post-process AI output (severity/priority guards)
+│   ├── auth/
+│   │   ├── authOptions.ts              # NextAuth config (Credentials + JWT)
+│   │   ├── getCurrentUser.ts           # Server helper: load full user record
+│   │   └── requireAuth.ts              # Route-handler guard (returns 401 NextResponse)
 │   ├── database/
-│   │   └── prisma.ts             # Prisma client singleton
+│   │   ├── db.ts                       # Drizzle client (Neon serverless Pool)
+│   │   ├── index.ts                    # Re-exports db + schema
+│   │   └── schema.ts                   # Drizzle schema (tables, enums, relations)
 │   ├── hooks/
-│   │   └── useStore.ts           # Zustand global state
+│   │   └── useStore.ts                 # Zustand global state
 │   └── utils/
-│       ├── index.ts              # Helper functions
-│       └── mockData.ts           # Demo data for all features
-├── prisma/
-│   ├── schema.prisma             # Database schema
-│   └── seed.ts                   # Seed data
+│       ├── index.ts                    # Helper functions
+│       └── mockData.ts                 # Demo data for /bugs and /analytics
 ├── styles/
-│   └── globals.css               # Global styles + Tailwind + custom components
+│   └── globals.css                     # Global styles + Tailwind + custom components
 ├── types/
-│   └── index.ts                  # TypeScript type definitions
+│   └── index.ts                        # TypeScript type definitions
 ├── public/
-│   └── assets/
-│       └── noise.svg             # Background texture
-├── tailwind.config.ts
+│   └── assets/                         # Static assets
+├── drizzle.config.ts                   # Drizzle Kit config (migrations output)
+├── middleware.ts                       # NextAuth route protection
 ├── next.config.js
+├── tailwind.config.ts
 ├── tsconfig.json
 ├── package.json
 ├── vercel.json
@@ -246,17 +285,9 @@ Export bug to Jira or GitHub format.
 }
 ```
 
-### POST `/api/testcases`
-
-Generate test cases from bug data.
-
 ### POST `/api/duplicates`
 
 Check for duplicate bugs.
-
-### POST `/api/quality-score`
-
-Calculate report quality score.
 
 ### GET `/api/health`
 
@@ -297,4 +328,4 @@ MIT
 
 ---
 
-Built with [Next.js](https://nextjs.org), [Tailwind CSS](https://tailwindcss.com), [Prisma](https://prisma.io), and [Claude AI](https://anthropic.com).
+Built with [Next.js](https://nextjs.org), [Tailwind CSS](https://tailwindcss.com), [Drizzle ORM](https://orm.drizzle.team), and [Claude AI](https://anthropic.com).

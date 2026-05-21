@@ -1,7 +1,9 @@
 import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
-import { prisma } from '@/lib/database/prisma';
+import { eq } from 'drizzle-orm';
+import { db } from '@/lib/database/db';
+import { users } from '@/lib/database/schema';
 
 // Extend the built-in session/JWT types to carry user.id
 declare module 'next-auth' {
@@ -34,8 +36,8 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email.trim().toLowerCase() },
+        const user = await db.query.users.findFirst({
+          where: eq(users.email, credentials.email.trim().toLowerCase()),
         });
 
         if (!user?.passwordHash) return null;

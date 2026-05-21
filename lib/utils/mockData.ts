@@ -1,4 +1,4 @@
-import { BugReport, DashboardStats, TestCase } from '@/types';
+import { BugReport, DashboardStats } from '@/types';
 
 export const mockBugs: BugReport[] = [
   {
@@ -187,38 +187,3 @@ export const mockDashboardStats: DashboardStats = {
   ],
 };
 
-export const mockTestCases: TestCase[] = [
-  {
-    id: 'tc-001',
-    bugReportId: 'bug-001',
-    title: 'SSO Login - Valid Corporate Account',
-    description: 'Verify successful SSO login with a valid corporate account through OAuth flow',
-    steps: ['Navigate to login page', 'Click SSO login button', 'Authenticate with valid corporate credentials', 'Verify redirect to dashboard'],
-    expectedResult: 'User is authenticated and sees the dashboard with correct session',
-    type: 'regression',
-    priority: 'P0',
-    createdAt: new Date(Date.now() - 2 * 3600000).toISOString(),
-  },
-  {
-    id: 'tc-002',
-    bugReportId: 'bug-001',
-    title: 'SSO Login - Expired Token Handling',
-    description: 'Verify proper handling when OAuth returns an expired token',
-    steps: ['Initiate SSO login', 'Simulate expired token in OAuth response', 'Verify error handling'],
-    expectedResult: 'User sees a clear error message and option to retry',
-    type: 'edge_case',
-    priority: 'P1',
-    createdAt: new Date(Date.now() - 2 * 3600000).toISOString(),
-  },
-  {
-    id: 'tc-003',
-    bugReportId: 'bug-002',
-    title: 'Currency Display - Region Switch',
-    description: 'Verify currency symbol updates when billing region changes',
-    steps: ['Navigate to billing settings', 'Change region from US to EU', 'Check currency symbol in payment form'],
-    expectedResult: 'Currency symbol changes from $ to €',
-    type: 'regression',
-    priority: 'P1',
-    createdAt: new Date(Date.now() - 8 * 3600000).toISOString(),
-  },
-];
