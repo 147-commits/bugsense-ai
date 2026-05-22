@@ -1,6 +1,10 @@
+import { eq } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 import { withAiContext } from '@/lib/ai/context';
 import { AiQuotaExceededError } from '@/lib/ai/runner';
+import { db } from '@/lib/database/db';
+import { organizations } from '@/lib/database/schema';
+import { setSentryContext } from '@/lib/observability/sentry';
 
 /**
  * Wrap a route handler body so any AI runner call inside it is gated
@@ -17,6 +21,18 @@ export async function withAiQuota(
   fn: () => Promise<NextResponse>,
 ): Promise<NextResponse> {
   if (!organizationId) return fn();
+
+  // Sentry context for any event captured inside this request.
+  if (db) {
+    const org = await db.query.organizations.findFirst({
+      where: eq(organizations.id, organizationId),
+      columns: { planTier: true },
+    });
+    setSentryContext({ workspaceId: organizationId, plan: org?.planTier });
+  } else {
+    setSentryContext({ workspaceId: organizationId });
+  }
+
   try {
     return await withAiContext({ organizationId }, fn);
   } catch (err) {
