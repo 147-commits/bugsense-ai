@@ -71,7 +71,7 @@ export default function JiraMappingEditor() {
     return (
       <div className="glass-panel p-6">
         <p className="text-sm text-text-secondary">
-          Jira is not connected for this organization.{' '}
+          Jira is not connected for this workspace.{' '}
           <a href="/settings" className="text-accent-blue hover:underline">
             Connect it in Settings
           </a>{' '}

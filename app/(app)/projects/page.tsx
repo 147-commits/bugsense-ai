@@ -52,7 +52,7 @@ function EmptyState({ onNew }: { onNew: () => void }) {
       </div>
       <h3 className="text-base font-semibold text-text-primary mb-1">No projects yet</h3>
       <p className="text-sm text-text-muted mb-6 max-w-xs">
-        Create your first project to organise bugs, test cases, and team members.
+        Create your first project to organise bugs, test cases, and workspace members.
       </p>
       <button onClick={onNew} className="btn-primary">
         <Plus className="w-4 h-4" /> New Project
@@ -599,7 +599,7 @@ export default function ProjectsPage() {
                 </span>
               </h1>
               <p className="text-xs text-text-muted mt-0.5">
-                Each project scopes bugs, test cases, and team access.
+                Each project scopes bugs, test cases, and workspace access.
               </p>
             </div>
             <button

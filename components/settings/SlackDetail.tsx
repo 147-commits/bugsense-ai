@@ -103,7 +103,7 @@ export default function SlackDetail() {
   if (!status.connected) {
     return (
       <div className="glass-panel p-6 space-y-3">
-        <p className="text-sm text-text-secondary">Slack is not connected for this organization.</p>
+        <p className="text-sm text-text-secondary">Slack is not connected for this workspace.</p>
         <a href="/api/integrations/slack/install" className="btn-primary text-sm inline-flex items-center gap-2">
           <Slack className="w-4 h-4" />
           Add to Slack
