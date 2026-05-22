@@ -27,7 +27,7 @@ export function isDryRun(): boolean {
 
 /** Standardised one-line log for dry-run output. */
 export function logDryRun(method: string, endpoint: string, payload: unknown): void {
-  console.log(
+  console.warn(
     `[stripe] DRY_RUN ${method} ${endpoint}`,
     JSON.stringify(redact(payload)),
   );

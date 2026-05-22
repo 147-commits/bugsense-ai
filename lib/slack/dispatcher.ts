@@ -43,7 +43,7 @@ async function resolveTarget(organizationId: string, eventKey: EventKey): Promis
 
 async function safePost(target: ResolvedTarget, blocks: unknown[], fallback: string): Promise<boolean> {
   if (process.env.SLACK_DRY_RUN === '1') {
-    console.log(
+    console.warn(
       '[slack/dispatcher] SLACK_DRY_RUN payload:',
       JSON.stringify({ channel: target.channelId, fallback, blocks }),
     );
@@ -140,7 +140,7 @@ export async function sendTestMessage(organizationId: string): Promise<TestMessa
   }
 
   if (process.env.SLACK_DRY_RUN === '1') {
-    console.log('[slack/dispatcher] SLACK_DRY_RUN test message to', cfg.channel_id);
+    console.warn('[slack/dispatcher] SLACK_DRY_RUN test message to', cfg.channel_id);
     return { ok: true };
   }
 
