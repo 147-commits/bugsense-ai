@@ -1,48 +1,73 @@
-import { withAuth } from 'next-auth/middleware';
-import { NextResponse } from 'next/server';
+import { getToken } from 'next-auth/jwt';
+import { NextResponse, type NextRequest } from 'next/server';
 
-// Paths that authenticated-but-unverified users may still reach. Everything
-// else under the matcher will bounce them to /settings/account.
-const UNVERIFIED_BYPASS = ['/settings/account'];
+const SECURITY_HEADERS: Record<string, string> = {
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+};
 
-export default withAuth(
-  function middleware(req) {
-    const token = req.nextauth.token;
-    if (!token) return; // Unauthenticated — withAuth handles the login redirect.
+function applyHeaders(res: NextResponse): NextResponse {
+  for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.headers.set(k, v);
+  return res;
+}
 
-    const isVerified = !!token.emailVerified;
-    if (isVerified) return;
+// Marketing, auth, and machine-to-machine endpoints. Reachable without a
+// session and never gated by the verify-email check.
+const PUBLIC_PATHS = new Set([
+  '/',
+  '/login',
+  '/signup',
+  '/forgot-password',
+  '/reset-password',
+  '/verify-email',
+  '/pricing',
+  '/privacy',
+  '/terms',
+  '/robots.txt',
+  '/sitemap.xml',
+]);
+const PUBLIC_PREFIXES = ['/api/auth', '/api/webhooks', '/api/health', '/api/cron'];
 
-    const pathname = req.nextUrl.pathname;
-    if (UNVERIFIED_BYPASS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
-      return;
-    }
-    const url = new URL('/settings/account', req.url);
-    url.searchParams.set('verifyRequired', '1');
-    return NextResponse.redirect(url);
-  },
-  {
-    callbacks: {
-      authorized: ({ token }) => !!token,
-    },
-    pages: {
-      signIn: '/login',
-    },
-  },
-);
+// Authenticated-but-unverified users may still reach these.
+const UNVERIFIED_BYPASS = new Set(['/settings/account']);
 
-/**
- * Matcher excludes:
- *   - Auth pages: /login, /signup, /forgot-password, /reset-password,
- *     /verify-email (token consumption needs no session)
- *   - Public marketing: / (landing), /pricing, /privacy, /terms
- *   - Auth endpoints: /api/auth/**
- *   - Machine-to-machine endpoints that must work without any user
- *     verification state: /api/webhooks/**, /api/health
- *   - Next.js internals and static assets
- */
+function isPublic(pathname: string): boolean {
+  if (PUBLIC_PATHS.has(pathname)) return true;
+  return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
+export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+
+  if (isPublic(pathname)) {
+    return applyHeaders(NextResponse.next());
+  }
+
+  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  if (!token) {
+    const signIn = new URL('/login', req.url);
+    signIn.searchParams.set('callbackUrl', pathname);
+    return applyHeaders(NextResponse.redirect(signIn));
+  }
+
+  const isVerified = !!token.emailVerified;
+  if (isVerified) return applyHeaders(NextResponse.next());
+
+  if (UNVERIFIED_BYPASS.has(pathname) || pathname.startsWith('/settings/account/')) {
+    return applyHeaders(NextResponse.next());
+  }
+
+  const url = new URL('/settings/account', req.url);
+  url.searchParams.set('verifyRequired', '1');
+  return applyHeaders(NextResponse.redirect(url));
+}
+
+// Run on every path except Next.js internals and static assets. Public-vs-
+// protected branching is done at runtime in `middleware()`; doing it via the
+// matcher would skip security-header application for excluded paths.
 export const config = {
-  matcher: [
-    '/((?!login|signup|forgot-password|reset-password|verify-email|pricing|privacy|terms|api/auth|api/webhooks|api/health|_next/static|_next/image|favicon\\.ico|assets|$).*)',
-  ],
+  matcher: ['/((?!_next/static|_next/image|favicon\\.ico|assets).*)'],
 };
