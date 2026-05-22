@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { sql } from 'drizzle-orm';
 import { db } from '@/lib/database/db';
+import { enforceRateLimit, ipKey } from '@/lib/security/rate-limit';
 
 // Explicit placeholder/dummy values rejected as "unconfigured" so a misfilled
 // .env doesn't silently look healthy. Matches the convention used by the AI
@@ -27,7 +28,10 @@ async function checkDatabase(): Promise<DbState> {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const limited = await enforceRateLimit({ key: ipKey(req), limit: 100 });
+  if (limited) return limited;
+
   const databaseState = await checkDatabase();
 
   const services = {

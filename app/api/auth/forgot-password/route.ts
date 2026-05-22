@@ -6,6 +6,7 @@ import { passwordResetTokens, users } from '@/lib/database/schema';
 import { generateToken, hashToken } from '@/lib/auth/tokens';
 import { sendEmail } from '@/lib/email/send';
 import { passwordResetEmail } from '@/lib/email/templates';
+import { enforceRateLimit, ipKey } from '@/lib/security/rate-limit';
 import { demoModeResponse, parseBody } from '@/lib/validation';
 
 const ForgotSchema = z.object({
@@ -15,6 +16,9 @@ const ForgotSchema = z.object({
 const RESET_TTL_MS = 60 * 60 * 1000;
 
 export async function POST(req: NextRequest) {
+  const limited = await enforceRateLimit({ key: ipKey(req), limit: 10 });
+  if (limited) return limited;
+
   const parsed = await parseBody(req, ForgotSchema);
   if (!parsed.ok) return parsed.response;
 

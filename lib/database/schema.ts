@@ -84,6 +84,15 @@ export const emailVerificationTokens = pgTable('EmailVerificationToken', {
   userIdx: index('EmailVerificationToken_userId_idx').on(t.userId),
 }));
 
+export const rateLimitBuckets = pgTable('RateLimitBucket', {
+  key: varchar('key').notNull(),
+  windowStart: timestamp('windowStart', { mode: 'date' }).notNull(),
+  count: integer('count').notNull().default(0),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.key, t.windowStart] }),
+  windowIdx: index('RateLimitBucket_windowStart_idx').on(t.windowStart),
+}));
+
 export const processedStripeEvents = pgTable('ProcessedStripeEvent', {
   eventId: varchar('eventId').primaryKey(),
   type: varchar('type').notNull(),
@@ -497,3 +506,5 @@ export type ProcessedStripeEvent = typeof processedStripeEvents.$inferSelect;
 export type NewProcessedStripeEvent = typeof processedStripeEvents.$inferInsert;
 export type MonthlyUsageCounter = typeof monthlyUsageCounters.$inferSelect;
 export type NewMonthlyUsageCounter = typeof monthlyUsageCounters.$inferInsert;
+export type RateLimitBucket = typeof rateLimitBuckets.$inferSelect;
+export type NewRateLimitBucket = typeof rateLimitBuckets.$inferInsert;

@@ -29,6 +29,13 @@
       "when": 1779466349533,
       "tag": "0003_rainy_miss_america",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1779470503126,
+      "tag": "0004_light_sprite",
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,7 @@ import {
   integrations,
   processedJiraEvents,
 } from '@/lib/database/schema';
+import { enforceRateLimit, ipKey } from '@/lib/security/rate-limit';
 import { parseJiraConfig, type JiraStatusKey } from '@/types/jira';
 
 type BugStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED' | 'DUPLICATE';
@@ -32,6 +33,9 @@ const PayloadSchema = z.object({
 type Ctx = { params: { token: string } };
 
 export async function POST(req: NextRequest, { params }: Ctx) {
+  const limited = await enforceRateLimit({ key: ipKey(req), limit: 100 });
+  if (limited) return limited;
+
   if (!db) {
     // Webhook called before db is configured — accept silently so Jira
     // doesn't retry. Nothing to do.

@@ -5,6 +5,7 @@ import { db } from '@/lib/database/db';
 import { organizations, processedStripeEvents } from '@/lib/database/schema';
 import { getStripe } from '@/lib/billing/client';
 import { tierForPriceId } from '@/lib/billing/plans';
+import { enforceRateLimit, ipKey } from '@/lib/security/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,6 +13,9 @@ export const dynamic = 'force-dynamic';
 const ACTIVE_STATUSES: Stripe.Subscription.Status[] = ['active', 'trialing'];
 
 export async function POST(req: NextRequest) {
+  const limited = await enforceRateLimit({ key: ipKey(req), limit: 100 });
+  if (limited) return limited;
+
   const stripe = getStripe();
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!stripe || !secret) {

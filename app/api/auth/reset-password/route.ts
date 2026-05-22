@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { db } from '@/lib/database/db';
 import { passwordResetTokens, users } from '@/lib/database/schema';
 import { hashToken } from '@/lib/auth/tokens';
+import { enforceRateLimit, ipKey } from '@/lib/security/rate-limit';
 import { demoModeResponse, parseBody } from '@/lib/validation';
 
 const ResetSchema = z.object({
@@ -13,6 +14,9 @@ const ResetSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  const limited = await enforceRateLimit({ key: ipKey(req), limit: 10 });
+  if (limited) return limited;
+
   const parsed = await parseBody(req, ResetSchema);
   if (!parsed.ok) return parsed.response;
 

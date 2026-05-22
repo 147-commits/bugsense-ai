@@ -7,6 +7,7 @@ import { emailVerificationTokens, users } from '@/lib/database/schema';
 import { generateToken, hashToken } from '@/lib/auth/tokens';
 import { sendEmail } from '@/lib/email/send';
 import { verificationEmail } from '@/lib/email/templates';
+import { enforceRateLimit, ipKey } from '@/lib/security/rate-limit';
 import { demoModeResponse, parseBody } from '@/lib/validation';
 
 const SignupSchema = z.object({
@@ -18,6 +19,9 @@ const SignupSchema = z.object({
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 
 export async function POST(req: NextRequest) {
+  const limited = await enforceRateLimit({ key: ipKey(req), limit: 10 });
+  if (limited) return limited;
+
   const parsed = await parseBody(req, SignupSchema);
   if (!parsed.ok) return parsed.response;
   const { name, email, password } = parsed.data;
