@@ -6,6 +6,7 @@ import { db } from '@/lib/database/db';
 import { passwordResetTokens, users } from '@/lib/database/schema';
 import { hashToken } from '@/lib/auth/tokens';
 import { enforceRateLimit, ipKey } from '@/lib/security/rate-limit';
+import { safeRoute } from '@/lib/security/safe-route';
 import { demoModeResponse, parseBody } from '@/lib/validation';
 
 const ResetSchema = z.object({
@@ -14,6 +15,7 @@ const ResetSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  return safeRoute('auth/reset-password', async () => {
   const limited = await enforceRateLimit({ key: ipKey(req), limit: 10 });
   if (limited) return limited;
 
@@ -47,4 +49,5 @@ export async function POST(req: NextRequest) {
     .where(eq(passwordResetTokens.id, record.id));
 
   return NextResponse.json({ ok: true });
+  });
 }

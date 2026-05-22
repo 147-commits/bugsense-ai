@@ -23,24 +23,36 @@ export async function enforceRateLimit(opts: {
 }): Promise<NextResponse | null> {
   if (!db) return null;
 
-  const bucket = currentMinuteBucket();
-  const [row] = await db
-    .insert(rateLimitBuckets)
-    .values({ key: opts.key, windowStart: bucket, count: 1 })
-    .onConflictDoUpdate({
-      target: [rateLimitBuckets.key, rateLimitBuckets.windowStart],
-      set: { count: sql`${rateLimitBuckets.count} + 1` },
-    })
-    .returning({ count: rateLimitBuckets.count });
+  try {
+    const bucket = currentMinuteBucket();
+    const [row] = await db
+      .insert(rateLimitBuckets)
+      .values({ key: opts.key, windowStart: bucket, count: 1 })
+      .onConflictDoUpdate({
+        target: [rateLimitBuckets.key, rateLimitBuckets.windowStart],
+        set: { count: sql`${rateLimitBuckets.count} + 1` },
+      })
+      .returning({ count: rateLimitBuckets.count });
 
-  const used = row?.count ?? 0;
-  if (used > opts.limit) {
-    return NextResponse.json(
-      { error: 'rate_limit_exceeded', limit: opts.limit, used, retryAfter: 60 },
-      { status: 429, headers: { 'Retry-After': '60' } },
+    const used = row?.count ?? 0;
+    if (used > opts.limit) {
+      return NextResponse.json(
+        { error: 'rate_limit_exceeded', limit: opts.limit, used, retryAfter: 60 },
+        { status: 429, headers: { 'Retry-After': '60' } },
+      );
+    }
+    return null;
+  } catch (err) {
+    // Fail open. The rate limiter is defence-in-depth; a missing table
+    // (migration not applied), a connection blip, or any other Postgres
+    // hiccup must not be allowed to break authentication. The incident
+    // shows up in logs and Sentry instead.
+    console.warn(
+      '[rate-limit] check failed, allowing request:',
+      err instanceof Error ? err.message : err,
     );
+    return null;
   }
-  return null;
 }
 
 export function ipKey(req: NextRequest): string {

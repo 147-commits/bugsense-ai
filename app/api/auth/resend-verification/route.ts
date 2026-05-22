@@ -7,11 +7,13 @@ import { generateToken, hashToken } from '@/lib/auth/tokens';
 import { sendEmail } from '@/lib/email/send';
 import { verificationEmail } from '@/lib/email/templates';
 import { enforceRateLimit, ipKey } from '@/lib/security/rate-limit';
+import { safeRoute } from '@/lib/security/safe-route';
 import { demoModeResponse } from '@/lib/validation';
 
 const TTL_MS = 24 * 60 * 60 * 1000;
 
 export async function POST(req: NextRequest) {
+  return safeRoute('auth/resend-verification', async () => {
   const limited = await enforceRateLimit({ key: ipKey(req), limit: 10 });
   if (limited) return limited;
 
@@ -45,5 +47,6 @@ export async function POST(req: NextRequest) {
     ok: true,
     emailSent: send.delivered,
     emailLogged: send.reason === 'no_api_key',
+  });
   });
 }
