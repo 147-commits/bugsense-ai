@@ -1,6 +1,33 @@
 import type { z } from 'zod';
+import { checkAiCallAllowed, recordAiCall } from '@/lib/billing/limits';
 import { AI_MODEL, getAnthropicClient } from './client';
 import { cacheGet, cacheKey, cacheSet } from './cache';
+import { getAiContext } from './context';
+
+export class AiQuotaExceededError extends Error {
+  constructor(
+    public limit: number,
+    public used: number,
+  ) {
+    super('AI call quota exceeded');
+    this.name = 'AiQuotaExceededError';
+  }
+}
+
+async function enforceQuota(): Promise<void> {
+  const ctx = getAiContext();
+  if (!ctx) return;
+  const check = await checkAiCallAllowed(ctx.organizationId);
+  if (!check.allowed && check.limit !== null) {
+    throw new AiQuotaExceededError(check.limit, check.used);
+  }
+}
+
+async function noteAttempt(): Promise<void> {
+  const ctx = getAiContext();
+  if (!ctx) return;
+  await recordAiCall(ctx.organizationId);
+}
 
 const TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_TOKENS = 4096;
@@ -114,6 +141,12 @@ export async function runJsonAI<T>(opts: RunJsonOptions<T>): Promise<T> {
 
   if (!getAnthropicClient()) return opts.mock();
 
+  // Cache miss + real client = about to spend an API call. Gate, then count
+  // the attempt regardless of outcome (mock fallback after a real failure
+  // still consumed the user's intent).
+  await enforceQuota();
+  await noteAttempt();
+
   const maxTokens = opts.maxTokens ?? DEFAULT_MAX_TOKENS;
   const temperature = opts.temperature ?? DEFAULT_TEMPERATURE;
   const model = opts.model ?? AI_MODEL;
@@ -191,6 +224,9 @@ export async function runTextAI(opts: RunTextOptions): Promise<string> {
   if (hit !== undefined) return hit;
 
   if (!getAnthropicClient()) return opts.mock();
+
+  await enforceQuota();
+  await noteAttempt();
 
   const maxTokens = opts.maxTokens ?? DEFAULT_TEXT_MAX_TOKENS;
   const temperature = opts.temperature ?? DEFAULT_TEXT_TEMPERATURE;

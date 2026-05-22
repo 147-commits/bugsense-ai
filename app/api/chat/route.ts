@@ -5,6 +5,8 @@ import { chatAboutBug } from '@/lib/ai/bugAnalyzer';
 import { requireAuth } from '@/lib/auth/requireAuth';
 import { db } from '@/lib/database/db';
 import { bugReports, chatMessages } from '@/lib/database/schema';
+import { resolveOrganizationId } from '@/lib/billing/org-resolver';
+import { withAiQuota } from '@/lib/billing/with-quota';
 import { parseBody } from '@/lib/validation';
 
 const ChatSchema = z.object({
@@ -30,6 +32,8 @@ export async function POST(req: NextRequest) {
   if (!parsed.ok) return parsed.response;
   const { bugReportId, message, history = [], projectId } = parsed.data;
 
+  const orgId = await resolveOrganizationId({ userId: auth.user.id, projectId });
+  return withAiQuota(orgId, async () => {
   try {
     let bugContext = 'No specific bug context available.';
     if (bugReportId && db) {
@@ -62,4 +66,5 @@ export async function POST(req: NextRequest) {
     console.error('Chat error:', error);
     return NextResponse.json({ error: 'Failed to generate response' }, { status: 500 });
   }
+  });
 }

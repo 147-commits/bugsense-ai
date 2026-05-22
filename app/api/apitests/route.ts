@@ -4,6 +4,8 @@ import { generateAPITests } from '@/lib/ai/bugAnalyzer';
 import { requireAuth } from '@/lib/auth/requireAuth';
 import { db } from '@/lib/database/db';
 import { generatedContent } from '@/lib/database/schema';
+import { resolveOrganizationId } from '@/lib/billing/org-resolver';
+import { withAiQuota } from '@/lib/billing/with-quota';
 import { parseBody } from '@/lib/validation';
 
 const ApiTestsSchema = z.object({
@@ -23,6 +25,8 @@ export async function POST(req: NextRequest) {
   if (!parsed.ok) return parsed.response;
   const { apiDescription, format, projectId } = parsed.data;
 
+  const orgId = await resolveOrganizationId({ userId: auth.user.id, projectId });
+  return withAiQuota(orgId, async () => {
   try {
     const result = await generateAPITests(apiDescription, format);
 
@@ -41,4 +45,5 @@ export async function POST(req: NextRequest) {
     console.error('API test gen error:', error);
     return NextResponse.json({ error: 'Failed to generate API tests' }, { status: 500 });
   }
+  });
 }

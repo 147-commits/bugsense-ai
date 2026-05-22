@@ -14,6 +14,8 @@ import { db } from '@/lib/database/db';
 import { bugReports } from '@/lib/database/schema';
 import { tryPushBugToJira } from '@/lib/jira/sync-out';
 import { tryNotifyCriticalBug } from '@/lib/slack/dispatcher';
+import { resolveOrganizationId } from '@/lib/billing/org-resolver';
+import { withAiQuota } from '@/lib/billing/with-quota';
 import { parseBody } from '@/lib/validation';
 
 type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
@@ -34,6 +36,8 @@ export async function POST(req: NextRequest) {
   if (!parsed.ok) return parsed.response;
   const { rawInput, logContent, screenshotBase64, projectId } = parsed.data;
 
+  const orgId = await resolveOrganizationId({ userId: auth.user.id, projectId });
+  return withAiQuota(orgId, async () => {
   try {
     const rawAnalysis = await analyzeBug(
       rawInput,
@@ -158,4 +162,5 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
+  });
 }

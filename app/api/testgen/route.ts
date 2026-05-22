@@ -4,6 +4,8 @@ import { generateTestCasesFromStory } from '@/lib/ai/bugAnalyzer';
 import { requireAuth } from '@/lib/auth/requireAuth';
 import { db } from '@/lib/database/db';
 import { generatedContent } from '@/lib/database/schema';
+import { resolveOrganizationId } from '@/lib/billing/org-resolver';
+import { withAiQuota } from '@/lib/billing/with-quota';
 import { parseBody } from '@/lib/validation';
 
 const TestGenSchema = z.object({
@@ -30,6 +32,8 @@ export async function POST(req: NextRequest) {
   if (!parsed.ok) return parsed.response;
   const { userStory, options, projectId } = parsed.data;
 
+  const orgId = await resolveOrganizationId({ userId: auth.user.id, projectId });
+  return withAiQuota(orgId, async () => {
   try {
     const result = await generateTestCasesFromStory(userStory, {
       includeNegative: options.includeNegative ?? true,
@@ -55,4 +59,5 @@ export async function POST(req: NextRequest) {
     console.error('Test gen error:', error);
     return NextResponse.json({ error: 'Failed to generate test cases' }, { status: 500 });
   }
+  });
 }

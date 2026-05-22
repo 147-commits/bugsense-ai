@@ -4,6 +4,8 @@ import { generateAutomationScript } from '@/lib/ai/bugAnalyzer';
 import { requireAuth } from '@/lib/auth/requireAuth';
 import { db } from '@/lib/database/db';
 import { generatedContent } from '@/lib/database/schema';
+import { resolveOrganizationId } from '@/lib/billing/org-resolver';
+import { withAiQuota } from '@/lib/billing/with-quota';
 import { parseBody } from '@/lib/validation';
 
 const AutomationSchema = z.object({
@@ -32,6 +34,8 @@ export async function POST(req: NextRequest) {
   if (!parsed.ok) return parsed.response;
   const { scenario, framework, options, projectId } = parsed.data;
 
+  const orgId = await resolveOrganizationId({ userId: auth.user.id, projectId });
+  return withAiQuota(orgId, async () => {
   try {
     const result = await generateAutomationScript(scenario, framework, {
       language: options.language ?? 'typescript',
@@ -56,4 +60,5 @@ export async function POST(req: NextRequest) {
     console.error('Automation error:', error);
     return NextResponse.json({ error: 'Failed to generate automation script' }, { status: 500 });
   }
+  });
 }
