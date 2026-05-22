@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Settings, Key, Globe, Database, Shield } from 'lucide-react';
 import TopBar from '@/components/layout/TopBar';
 import JiraSection from '@/components/settings/JiraSection';
+import SlackSection from '@/components/settings/SlackSection';
 import { cn } from '@/lib/utils';
 
 export default function SettingsPage() {
@@ -139,9 +140,9 @@ export default function SettingsPage() {
 
           <div className="space-y-3">
             <JiraSection />
+            <SlackSection />
             {[
               { name: 'GitHub Issues', desc: 'Push bugs to GitHub repositories', connected: false },
-              { name: 'Slack', desc: 'Get bug alerts in Slack channels', connected: false },
               { name: 'PostgreSQL', desc: 'Database for persistent storage', connected: true },
             ].map((integration) => (
               <div key={integration.name} className="flex items-center gap-4 p-3 rounded-xl bg-bg-tertiary">
