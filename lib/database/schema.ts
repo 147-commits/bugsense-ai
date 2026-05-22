@@ -24,12 +24,76 @@ export const users = pgTable('User', {
   email: varchar('email').notNull().unique(),
   emailVerified: timestamp('emailVerified', { mode: 'date' }),
   name: varchar('name'),
+  // `image` mirrors NextAuth's expected column name and is populated by
+  // OAuth providers via the Drizzle adapter. `avatarUrl` remains for legacy reads.
+  image: varchar('image'),
   avatarUrl: varchar('avatarUrl'),
   passwordHash: varchar('passwordHash'),
   createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
   updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().defaultNow(),
 }, (t) => ({
   emailIdx: index('User_email_idx').on(t.email),
+}));
+
+// ─── NextAuth adapter tables ──────────────────────────────────────────────────
+
+export const accounts = pgTable('Account', {
+  userId: varchar('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  type: varchar('type').notNull(),
+  provider: varchar('provider').notNull(),
+  providerAccountId: varchar('providerAccountId').notNull(),
+  refresh_token: text('refresh_token'),
+  access_token: text('access_token'),
+  expires_at: integer('expires_at'),
+  token_type: varchar('token_type'),
+  scope: varchar('scope'),
+  id_token: text('id_token'),
+  session_state: varchar('session_state'),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.provider, t.providerAccountId] }),
+  userIdx: index('Account_userId_idx').on(t.userId),
+}));
+
+export const sessions = pgTable('Session', {
+  sessionToken: varchar('sessionToken').primaryKey(),
+  userId: varchar('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  expires: timestamp('expires', { mode: 'date' }).notNull(),
+}, (t) => ({
+  userIdx: index('Session_userId_idx').on(t.userId),
+}));
+
+export const verificationTokens = pgTable('VerificationToken', {
+  identifier: varchar('identifier').notNull(),
+  token: varchar('token').notNull(),
+  expires: timestamp('expires', { mode: 'date' }).notNull(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.identifier, t.token] }),
+}));
+
+// ─── Custom email verification + password reset tokens ───────────────────────
+
+export const emailVerificationTokens = pgTable('EmailVerificationToken', {
+  id: varchar('id').primaryKey().$defaultFn(cuid),
+  userId: varchar('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tokenHash: varchar('tokenHash').notNull(),
+  expiresAt: timestamp('expiresAt', { mode: 'date' }).notNull(),
+  usedAt: timestamp('usedAt', { mode: 'date' }),
+  createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
+}, (t) => ({
+  tokenHashIdx: uniqueIndex('EmailVerificationToken_tokenHash_key').on(t.tokenHash),
+  userIdx: index('EmailVerificationToken_userId_idx').on(t.userId),
+}));
+
+export const passwordResetTokens = pgTable('PasswordResetToken', {
+  id: varchar('id').primaryKey().$defaultFn(cuid),
+  userId: varchar('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tokenHash: varchar('tokenHash').notNull(),
+  expiresAt: timestamp('expiresAt', { mode: 'date' }).notNull(),
+  usedAt: timestamp('usedAt', { mode: 'date' }),
+  createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
+}, (t) => ({
+  tokenHashIdx: uniqueIndex('PasswordResetToken_tokenHash_key').on(t.tokenHash),
+  userIdx: index('PasswordResetToken_userId_idx').on(t.userId),
 }));
 
 export const organizations = pgTable('Organization', {
@@ -272,6 +336,26 @@ export const usersRelations = relations(users, ({ many }) => ({
   organizations: many(organizationMembers),
   projectMembers: many(projectMembers),
   usageLogs: many(usageLogs),
+  accounts: many(accounts),
+  sessions: many(sessions),
+  emailVerificationTokens: many(emailVerificationTokens),
+  passwordResetTokens: many(passwordResetTokens),
+}));
+
+export const accountsRelations = relations(accounts, ({ one }) => ({
+  user: one(users, { fields: [accounts.userId], references: [users.id] }),
+}));
+
+export const sessionsRelations = relations(sessions, ({ one }) => ({
+  user: one(users, { fields: [sessions.userId], references: [users.id] }),
+}));
+
+export const emailVerificationTokensRelations = relations(emailVerificationTokens, ({ one }) => ({
+  user: one(users, { fields: [emailVerificationTokens.userId], references: [users.id] }),
+}));
+
+export const passwordResetTokensRelations = relations(passwordResetTokens, ({ one }) => ({
+  user: one(users, { fields: [passwordResetTokens.userId], references: [users.id] }),
 }));
 
 export const organizationsRelations = relations(organizations, ({ many }) => ({
@@ -371,3 +455,13 @@ export type BugJiraLink = typeof bugJiraLinks.$inferSelect;
 export type NewBugJiraLink = typeof bugJiraLinks.$inferInsert;
 export type ProcessedJiraEvent = typeof processedJiraEvents.$inferSelect;
 export type NewProcessedJiraEvent = typeof processedJiraEvents.$inferInsert;
+export type Account = typeof accounts.$inferSelect;
+export type NewAccount = typeof accounts.$inferInsert;
+export type Session = typeof sessions.$inferSelect;
+export type NewSession = typeof sessions.$inferInsert;
+export type VerificationToken = typeof verificationTokens.$inferSelect;
+export type NewVerificationToken = typeof verificationTokens.$inferInsert;
+export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect;
+export type NewEmailVerificationToken = typeof emailVerificationTokens.$inferInsert;
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type NewPasswordResetToken = typeof passwordResetTokens.$inferInsert;
