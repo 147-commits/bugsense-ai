@@ -13,6 +13,7 @@ import { requireAuth } from '@/lib/auth/requireAuth';
 import { db } from '@/lib/database/db';
 import { bugReports } from '@/lib/database/schema';
 import { tryPushBugToJira } from '@/lib/jira/sync-out';
+import { tryNotifyCriticalBug } from '@/lib/slack/dispatcher';
 import { parseBody } from '@/lib/validation';
 
 type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
@@ -129,6 +130,16 @@ export async function POST(req: NextRequest) {
     if (persistedBugId) {
       const result = await tryPushBugToJira(persistedBugId, { siteOrigin: req.nextUrl.origin });
       if (result) jiraSync = { jiraIssueKey: result.jiraIssueKey, created: result.created };
+    }
+
+    if (persistedBugId && (bugReport.severity === 'CRITICAL' || bugReport.severity === 'HIGH')) {
+      void tryNotifyCriticalBug({
+        projectId: projectId ?? null,
+        bugId: persistedBugId,
+        title: bugReport.title,
+        severity: bugReport.severity,
+        origin: req.nextUrl.origin,
+      });
     }
 
     return NextResponse.json({
