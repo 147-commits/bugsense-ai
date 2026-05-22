@@ -13,7 +13,7 @@ export const severityEnum = pgEnum('Severity', ['CRITICAL', 'HIGH', 'MEDIUM', 'L
 export const priorityEnum = pgEnum('Priority', ['P0', 'P1', 'P2', 'P3', 'P4']);
 export const bugStatusEnum = pgEnum('BugStatus', ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'DUPLICATE']);
 export const memberRoleEnum = pgEnum('MemberRole', ['OWNER', 'ADMIN', 'MEMBER', 'VIEWER']);
-export const planTierEnum = pgEnum('PlanTier', ['FREE', 'PRO', 'ENTERPRISE']);
+export const planTierEnum = pgEnum('PlanTier', ['FREE', 'PRO', 'TEAM', 'ENTERPRISE']);
 export const integrationTypeEnum = pgEnum('IntegrationType', ['GITHUB', 'JIRA', 'LINEAR', 'SLACK', 'WEBHOOK']);
 export const verdictEnum = pgEnum('Verdict', ['GO', 'CAUTION', 'NO_GO']);
 
@@ -84,6 +84,26 @@ export const emailVerificationTokens = pgTable('EmailVerificationToken', {
   userIdx: index('EmailVerificationToken_userId_idx').on(t.userId),
 }));
 
+export const processedStripeEvents = pgTable('ProcessedStripeEvent', {
+  eventId: varchar('eventId').primaryKey(),
+  type: varchar('type').notNull(),
+  receivedAt: timestamp('receivedAt', { mode: 'date' }).notNull().defaultNow(),
+}, (t) => ({
+  receivedIdx: index('ProcessedStripeEvent_receivedAt_idx').on(t.receivedAt),
+}));
+
+export const monthlyUsageCounters = pgTable('MonthlyUsageCounter', {
+  id: varchar('id').primaryKey().$defaultFn(cuid),
+  organizationId: varchar('organizationId').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  // 'YYYY-MM' bucket in UTC.
+  yearMonth: varchar('yearMonth').notNull(),
+  aiCalls: integer('aiCalls').notNull().default(0),
+  updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().defaultNow(),
+}, (t) => ({
+  orgMonthUnique: uniqueIndex('MonthlyUsageCounter_org_month_key').on(t.organizationId, t.yearMonth),
+  orgIdx: index('MonthlyUsageCounter_organizationId_idx').on(t.organizationId),
+}));
+
 export const passwordResetTokens = pgTable('PasswordResetToken', {
   id: varchar('id').primaryKey().$defaultFn(cuid),
   userId: varchar('userId').notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -101,10 +121,13 @@ export const organizations = pgTable('Organization', {
   name: varchar('name').notNull(),
   slug: varchar('slug').notNull().unique(),
   planTier: planTierEnum('planTier').notNull().default('FREE'),
+  stripeCustomerId: varchar('stripeCustomerId'),
+  stripeSubscriptionId: varchar('stripeSubscriptionId'),
   createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
   updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().defaultNow(),
 }, (t) => ({
   slugIdx: index('Organization_slug_idx').on(t.slug),
+  stripeCustomerIdx: uniqueIndex('Organization_stripeCustomerId_key').on(t.stripeCustomerId),
 }));
 
 export const organizationMembers = pgTable('OrganizationMember', {
@@ -363,6 +386,11 @@ export const organizationsRelations = relations(organizations, ({ many }) => ({
   projects: many(projects),
   usageLogs: many(usageLogs),
   integrations: many(integrations),
+  monthlyUsageCounters: many(monthlyUsageCounters),
+}));
+
+export const monthlyUsageCountersRelations = relations(monthlyUsageCounters, ({ one }) => ({
+  organization: one(organizations, { fields: [monthlyUsageCounters.organizationId], references: [organizations.id] }),
 }));
 
 export const organizationMembersRelations = relations(organizationMembers, ({ one }) => ({
@@ -465,3 +493,7 @@ export type EmailVerificationToken = typeof emailVerificationTokens.$inferSelect
 export type NewEmailVerificationToken = typeof emailVerificationTokens.$inferInsert;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type NewPasswordResetToken = typeof passwordResetTokens.$inferInsert;
+export type ProcessedStripeEvent = typeof processedStripeEvents.$inferSelect;
+export type NewProcessedStripeEvent = typeof processedStripeEvents.$inferInsert;
+export type MonthlyUsageCounter = typeof monthlyUsageCounters.$inferSelect;
+export type NewMonthlyUsageCounter = typeof monthlyUsageCounters.$inferInsert;
