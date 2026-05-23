@@ -24,6 +24,15 @@ function initDb(): DB | null {
   }
   try {
     const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    // Neon/pg pools emit 'error' on idle-client and connection failures (bad
+    // credentials, dropped socket). With no listener this bubbles up as an
+    // uncaughtException and takes down the whole server. Log and swallow — the
+    // in-flight query still rejects, so route handlers surface a clean error
+    // instead of the process dying.
+    pool.on('error', (err: Error) => {
+      // eslint-disable-next-line no-console
+      console.error(`[db] pool error (check DATABASE_URL credentials/host): ${err.message}`);
+    });
     return drizzle(pool, { schema });
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);

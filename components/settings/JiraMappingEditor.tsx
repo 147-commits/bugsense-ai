@@ -42,8 +42,28 @@ export default function JiraMappingEditor() {
     load();
   }, [load]);
 
+  // Mirror the server's zod rules so the user sees a clear inline message
+  // instead of a raw 400 from the PUT.
+  const validate = (m: JiraMappings): string | null => {
+    if (m.projectKey !== null && !/^[A-Z][A-Z0-9_]*$/.test(m.projectKey)) {
+      return 'Project key must start with a letter and use only uppercase letters, digits, or underscore.';
+    }
+    if (!m.issueTypeName.trim()) return 'Issue type cannot be empty.';
+    const empty = [
+      ...STATUS_KEYS.filter((k) => !m.status[k]?.trim()),
+      ...PRIORITY_KEYS.filter((k) => !m.priority[k]?.trim()),
+    ];
+    if (empty.length > 0) return `Mapping values cannot be empty: ${empty.join(', ')}.`;
+    return null;
+  };
+
   const save = async () => {
     if (!mappings) return;
+    const validationError = validate(mappings);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
