@@ -26,6 +26,28 @@ interface GeneratorPageProps {
   exampleInputs?: { label: string; value: string }[];
 }
 
+/**
+ * Turn a non-OK response into a user-facing message. Reads the typed
+ * error body the API routes return ({ error, issues } for 400,
+ * { error: 'limit_reached', limit, used, upgradeUrl } for 402,
+ * { error, detail, demoMode } for 503).
+ */
+async function readErrorMessage(res: Response): Promise<string> {
+  const body = (await res.json().catch(() => null)) as
+    | { error?: string; message?: string; detail?: string; limit?: number; used?: number }
+    | null;
+  if (res.status === 402) {
+    const used = typeof body?.used === 'number' ? body.used : null;
+    const limit = typeof body?.limit === 'number' ? body.limit : null;
+    return used !== null && limit !== null
+      ? `Monthly AI limit reached (${used}/${limit}). Upgrade your plan to keep generating.`
+      : 'Monthly AI limit reached. Upgrade your plan to keep generating.';
+  }
+  if (res.status === 401) return 'Your session expired. Please sign in again.';
+  if (res.status === 503 && body?.detail) return body.detail;
+  return body?.error ?? body?.message ?? `Generation failed (${res.status}).`;
+}
+
 export default function GeneratorPage({
   title, subtitle, icon, placeholder, apiEndpoint,
   buildPayload, renderResult, generatorOptions = [], exampleInputs = [],
@@ -68,12 +90,14 @@ export default function GeneratorPage({
         });
         if (cancelledRef.current) break;
         if (!res.ok) {
-          const errText = await res.text();
           if (res.status === 429 || res.status >= 500) {
             if (attempt === 2) setError('AI is busy. Please wait 30 seconds and try again.');
             continue;
           }
-          throw new Error(errText);
+          // 4xx (quota, validation, auth) won't change on retry — surface the
+          // real reason and stop instead of masking it as "Generation failed".
+          setError(await readErrorMessage(res));
+          break;
         }
         const data = await res.json();
         if (!cancelledRef.current) { setResult(data); setError(null); }
@@ -246,14 +270,26 @@ export default function GeneratorPage({
                 <FeedbackBar
                   onRefine={async (feedback) => {
                     setIsLoading(true);
+                    setError(null);
+                    // The routes don't accept a separate refine field, so fold the
+                    // feedback into the prompt input — that's what reaches the AI.
+                    const refinedInput = `${input}\n\n--- Refinement request ---\n${feedback}\nRegenerate the output incorporating this feedback.`;
                     try {
                       const res = await fetch(apiEndpoint, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ...buildPayload(input, options), projectId: currentProject?.id, refineFeedback: feedback }),
+                        body: JSON.stringify({ ...buildPayload(refinedInput, options), projectId: currentProject?.id }),
                       });
-                      if (res.ok) { const data = await res.json(); setResult(data); }
-                    } catch {} finally { setIsLoading(false); }
+                      if (res.ok) {
+                        setResult(await res.json());
+                      } else {
+                        setError(await readErrorMessage(res));
+                      }
+                    } catch {
+                      setError('Refine failed. Check your connection and try again.');
+                    } finally {
+                      setIsLoading(false);
+                    }
                   }}
                   isRefining={isLoading}
                 />
