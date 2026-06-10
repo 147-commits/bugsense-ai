@@ -1,13 +1,15 @@
 'use client';
 
 import { useState, FormEvent } from 'react';
+import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
+import FormError from '@/components/auth/FormError';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; requestId?: string | null } | null>(null);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -19,13 +21,17 @@ export default function ForgotPasswordPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; requestId?: string };
       if (!res.ok) {
-        setError('Could not start password reset. Try again.');
+        setError({
+          message: data.error ?? 'Could not start password reset. Try again.',
+          requestId: data.requestId ?? res.headers.get('x-request-id'),
+        });
       } else {
         setSent(true);
       }
     } catch {
-      setError('Network error. Try again.');
+      setError({ message: 'Network error. Try again.' });
     } finally {
       setLoading(false);
     }
@@ -38,18 +44,14 @@ export default function ForgotPasswordPage() {
         <p className="mt-1 text-text-muted text-sm">We will email you a reset link if an account exists.</p>
       </div>
 
-      {error && (
-        <div className="mb-4 px-3 py-2.5 rounded-lg bg-severity-critical/10 text-severity-critical text-sm">
-          {error}
-        </div>
-      )}
+      {error && <FormError message={error.message} requestId={error.requestId} />}
 
       {sent ? (
-        <div className="px-3 py-3 rounded-lg bg-accent-emerald/10 text-accent-emerald text-sm">
+        <div role="status" aria-live="polite" className="px-3 py-3 rounded-lg bg-accent-emerald/10 text-accent-emerald text-sm">
           If an account exists for that email, a reset link is on its way. Check your inbox.
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <form onSubmit={handleSubmit} aria-busy={loading} className="flex flex-col gap-3">
           <div>
             <label htmlFor="email" className="text-text-secondary text-xs font-medium mb-1 block">Email</label>
             <input id="email" type="email" autoComplete="email" required value={email}
@@ -65,7 +67,7 @@ export default function ForgotPasswordPage() {
 
       <p className="mt-5 text-center text-text-muted text-xs">
         Remembered it?{' '}
-        <a href="/login" className="text-accent hover:underline">Back to sign in</a>
+        <Link href="/login" className="text-accent hover:underline">Back to sign in</Link>
       </p>
     </div>
   );

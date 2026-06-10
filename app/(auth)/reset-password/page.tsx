@@ -1,8 +1,10 @@
 'use client';
 
-import { Suspense, useState, FormEvent } from 'react';
+import { Suspense, useState, FormEvent, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
+import PasswordInput from '@/components/auth/PasswordInput';
+import FormError from '@/components/auth/FormError';
 
 export default function ResetPasswordPage() {
   return (
@@ -19,19 +21,25 @@ function ResetPasswordForm() {
 
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [confirmTouched, setConfirmTouched] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; requestId?: string | null } | null>(null);
   const [done, setDone] = useState(false);
+
+  const mismatch = useMemo(() => {
+    if (!confirmTouched || confirm.length === 0) return false;
+    return confirm !== password;
+  }, [confirmTouched, confirm, password]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     if (password !== confirm) {
-      setError('Passwords do not match.');
+      setError({ message: 'Passwords do not match.' });
       return;
     }
     if (!token) {
-      setError('Missing reset token. Click the link in your email again.');
+      setError({ message: 'Missing reset token. Click the link in your email again.' });
       return;
     }
     setLoading(true);
@@ -41,15 +49,18 @@ function ResetPasswordForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, password }),
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      const data = (await res.json().catch(() => ({}))) as { error?: string; requestId?: string };
       if (!res.ok) {
-        setError(reasonCopy(data.error));
+        setError({
+          message: reasonCopy(data.error),
+          requestId: data.requestId ?? res.headers.get('x-request-id'),
+        });
         return;
       }
       setDone(true);
       setTimeout(() => router.push('/login?reset=1'), 1200);
     } catch {
-      setError('Network error. Try again.');
+      setError({ message: 'Network error. Try again.' });
     } finally {
       setLoading(false);
     }
@@ -57,7 +68,7 @@ function ResetPasswordForm() {
 
   if (done) {
     return (
-      <div className="glass-panel p-8 text-center">
+      <div className="glass-panel p-8 text-center" role="status" aria-live="polite">
         <h1 className="text-xl font-semibold text-text-primary mb-1">Password updated</h1>
         <p className="text-sm text-text-secondary">Redirecting to sign in…</p>
       </div>
@@ -71,26 +82,43 @@ function ResetPasswordForm() {
         <p className="mt-1 text-text-muted text-sm">Choose a new password for your workspace.</p>
       </div>
 
-      {error && (
-        <div className="mb-4 px-3 py-2.5 rounded-lg bg-severity-critical/10 text-severity-critical text-sm">
-          {error}
-        </div>
-      )}
+      {error && <FormError message={error.message} requestId={error.requestId} />}
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+      <form onSubmit={handleSubmit} aria-busy={loading} className="flex flex-col gap-3">
+        <PasswordInput
+          id="password"
+          label="New password"
+          autoComplete="new-password"
+          required
+          minLength={8}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Min. 8 characters"
+          disabled={loading}
+          showStrength
+        />
         <div>
-          <label htmlFor="password" className="text-text-secondary text-xs font-medium mb-1 block">New password</label>
-          <input id="password" type="password" autoComplete="new-password" required minLength={8} value={password}
-            onChange={(e) => setPassword(e.target.value)} placeholder="Min. 8 characters"
-            className="input-field" disabled={loading} />
+          <PasswordInput
+            id="confirm"
+            label="Confirm password"
+            autoComplete="new-password"
+            required
+            minLength={8}
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            onBlur={() => setConfirmTouched(true)}
+            placeholder="Repeat new password"
+            disabled={loading}
+            aria-invalid={mismatch || undefined}
+            aria-describedby={mismatch ? 'confirm-error' : undefined}
+          />
+          {mismatch && (
+            <p id="confirm-error" role="alert" className="mt-1 text-[11px] text-severity-critical">
+              Passwords do not match.
+            </p>
+          )}
         </div>
-        <div>
-          <label htmlFor="confirm" className="text-text-secondary text-xs font-medium mb-1 block">Confirm password</label>
-          <input id="confirm" type="password" autoComplete="new-password" required minLength={8} value={confirm}
-            onChange={(e) => setConfirm(e.target.value)} placeholder="Repeat new password"
-            className="input-field" disabled={loading} />
-        </div>
-        <button type="submit" disabled={loading} className="btn-primary w-full mt-1">
+        <button type="submit" disabled={loading || mismatch} className="btn-primary w-full mt-1">
           {loading ? <Loader2 size={14} className="animate-spin" /> : null}
           Set new password
         </button>
