@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { authOptions } from '@/lib/auth/authOptions';
 import { db, type DB } from '@/lib/database/db';
@@ -14,6 +14,7 @@ import {
 } from '@/lib/database/schema';
 import { demoModeResponse, parseBody } from '@/lib/validation';
 import { requireSameOrigin } from '@/lib/security/same-origin';
+import { logger } from '@/lib/observability/logger';
 
 const CreateProjectSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -74,13 +75,13 @@ async function attachCounts<T extends { id: string }>(dbConn: DB, rows: T[]) {
   const bugCounts = await dbConn
     .select({ projectId: bugReports.projectId, count: sql<number>`count(*)::int` })
     .from(bugReports)
-    .where(sql`${bugReports.projectId} = ANY(${ids})`)
+    .where(inArray(bugReports.projectId, ids))
     .groupBy(bugReports.projectId);
 
   const memberCounts = await dbConn
     .select({ projectId: projectMembers.projectId, count: sql<number>`count(*)::int` })
     .from(projectMembers)
-    .where(sql`${projectMembers.projectId} = ANY(${ids})`)
+    .where(inArray(projectMembers.projectId, ids))
     .groupBy(projectMembers.projectId);
 
   const bugMap = new Map(bugCounts.map((c) => [c.projectId, Number(c.count)]));
@@ -98,27 +99,32 @@ async function attachCounts<T extends { id: string }>(dbConn: DB, rows: T[]) {
 // ── GET /api/projects ─────────────────────────────────────────────────────────
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  if (!db) return NextResponse.json([]);
+    if (!db) return NextResponse.json([]);
 
-  const org = await resolveOrg(db, session.user.id);
+    const org = await resolveOrg(db, session.user.id);
 
-  const rows = await db.query.projects.findMany({
-    where: eq(projects.organizationId, org.id),
-    orderBy: desc(projects.createdAt),
-  });
+    const rows = await db.query.projects.findMany({
+      where: eq(projects.organizationId, org.id),
+      orderBy: desc(projects.createdAt),
+    });
 
-  const withCounts = await attachCounts(db, rows);
-  // Short private cache absorbs the burst when the dashboard fans out to
-  // /api/projects + /api/bugs/stats on every render; mutating endpoints
-  // (POST/PATCH/DELETE below) return immediately uncached, so a fresh
-  // project shows up on the next dashboard load without the user noticing
-  // the 10s window.
-  const res = NextResponse.json(withCounts);
-  res.headers.set('Cache-Control', 'private, max-age=10');
-  return res;
+    const withCounts = await attachCounts(db, rows);
+    // Short private cache absorbs the burst when the dashboard fans out to
+    // /api/projects + /api/bugs/stats on every render; mutating endpoints
+    // (POST/PATCH/DELETE below) return immediately uncached, so a fresh
+    // project shows up on the next dashboard load without the user noticing
+    // the 10s window.
+    const res = NextResponse.json(withCounts);
+    res.headers.set('Cache-Control', 'private, max-age=10');
+    return res;
+  } catch (error) {
+    logger.error('projects list failed', error);
+    return NextResponse.json({ error: 'Failed to load projects' }, { status: 500 });
+  }
 }
 
 // ── POST /api/projects ────────────────────────────────────────────────────────
@@ -126,41 +132,46 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const csrf = requireSameOrigin(req);
   if (csrf) return csrf;
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const parsed = await parseBody(req, CreateProjectSchema);
-  if (!parsed.ok) return parsed.response;
-  const { name, description, techStack, testConventions } = parsed.data;
+    const parsed = await parseBody(req, CreateProjectSchema);
+    if (!parsed.ok) return parsed.response;
+    const { name, description, techStack, testConventions } = parsed.data;
 
-  if (!db) return demoModeResponse('Creating a project requires a configured database.');
+    if (!db) return demoModeResponse('Creating a project requires a configured database.');
 
-  const org = await resolveOrg(db, session.user.id);
+    const org = await resolveOrg(db, session.user.id);
 
-  const baseSlug = slugify(name);
-  const conflict = await db.query.projects.findFirst({
-    where: and(eq(projects.organizationId, org.id), eq(projects.slug, baseSlug)),
-  });
-  const slug = conflict ? `${baseSlug}-${Date.now().toString(36)}` : baseSlug;
+    const baseSlug = slugify(name);
+    const conflict = await db.query.projects.findFirst({
+      where: and(eq(projects.organizationId, org.id), eq(projects.slug, baseSlug)),
+    });
+    const slug = conflict ? `${baseSlug}-${Date.now().toString(36)}` : baseSlug;
 
-  const [project] = await db
-    .insert(projects)
-    .values({
-      name: name.trim(),
-      slug,
-      description: description?.trim() || null,
-      techStack: techStack ?? [],
-      testConventions: testConventions ?? null,
-      organizationId: org.id,
-    })
-    .returning();
+    const [project] = await db
+      .insert(projects)
+      .values({
+        name: name.trim(),
+        slug,
+        description: description?.trim() || null,
+        techStack: techStack ?? [],
+        testConventions: testConventions ?? null,
+        organizationId: org.id,
+      })
+      .returning();
 
-  await db.insert(projectMembers).values({
-    userId: session.user.id,
-    projectId: project.id,
-    role: 'OWNER',
-  });
+    await db.insert(projectMembers).values({
+      userId: session.user.id,
+      projectId: project.id,
+      role: 'OWNER',
+    });
 
-  const [withCounts] = await attachCounts(db, [project]);
-  return NextResponse.json(withCounts, { status: 201 });
+    const [withCounts] = await attachCounts(db, [project]);
+    return NextResponse.json(withCounts, { status: 201 });
+  } catch (error) {
+    logger.error('project creation failed', error);
+    return NextResponse.json({ error: 'Failed to create project' }, { status: 500 });
+  }
 }
