@@ -10,6 +10,7 @@ import { db } from '@/lib/database/db';
 import { accounts, sessions, users, verificationTokens } from '@/lib/database/schema';
 import { sendEmail } from '@/lib/email/send';
 import { magicLinkEmail } from '@/lib/email/templates';
+import { recordAuthEvent } from '@/lib/auth/audit';
 
 declare module 'next-auth' {
   interface Session {
@@ -27,6 +28,8 @@ declare module 'next-auth/jwt' {
   interface JWT {
     id?: string;
     emailVerified?: number | null;
+    /** Epoch ms of the user's last password change at the time this JWT was issued. */
+    pwdAt?: number | null;
   }
 }
 
@@ -42,13 +45,20 @@ function buildProviders(): NextAuthOptions['providers'] {
         if (!credentials?.email || !credentials?.password) return null;
         if (!db) return null;
 
+        const normalizedEmail = credentials.email.trim().toLowerCase();
         const user = await db.query.users.findFirst({
-          where: eq(users.email, credentials.email.trim().toLowerCase()),
+          where: eq(users.email, normalizedEmail),
         });
-        if (!user?.passwordHash) return null;
+        if (!user?.passwordHash) {
+          await recordAuthEvent({ kind: 'SIGNIN_FAILED', metadata: { email: normalizedEmail, reason: 'no_user' } });
+          return null;
+        }
 
         const valid = await bcrypt.compare(credentials.password, user.passwordHash);
-        if (!valid) return null;
+        if (!valid) {
+          await recordAuthEvent({ kind: 'SIGNIN_FAILED', userId: user.id, metadata: { reason: 'bad_password' } });
+          return null;
+        }
 
         return {
           id: user.id,
@@ -111,16 +121,27 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
       }
-      // Refresh emailVerified from DB on sign-in and on explicit client
-      // update() calls (used after the user clicks the verification link).
-      // Stays cached in the JWT for the rest of the session.
-      const shouldRefresh = !!user || trigger === 'update';
-      if (shouldRefresh && token.id && db) {
+      // Refresh emailVerified + pwdAt from DB on sign-in and on explicit
+      // client update() calls. We also re-fetch on every callback so a
+      // password change in another session invalidates this JWT on the
+      // user's next page load — one indexed lookup by id, cheap enough.
+      if (token.id && db) {
         const row = await db.query.users.findFirst({
           where: eq(users.id, token.id),
-          columns: { emailVerified: true },
+          columns: { emailVerified: true, passwordChangedAt: true },
         });
-        token.emailVerified = row?.emailVerified ? row.emailVerified.getTime() : null;
+        if (!row) {
+          // User was deleted — drop the session.
+          return {};
+        }
+        const currentPwdAt = row.passwordChangedAt ? row.passwordChangedAt.getTime() : null;
+        if (!!user || trigger === 'update') {
+          token.emailVerified = row.emailVerified ? row.emailVerified.getTime() : null;
+          token.pwdAt = currentPwdAt;
+        } else if (token.pwdAt !== undefined && currentPwdAt !== null && (token.pwdAt ?? 0) < currentPwdAt) {
+          // Password changed after this JWT was issued — force re-auth.
+          return {};
+        }
       }
       return token;
     },
@@ -129,8 +150,23 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id as string;
         session.user.emailVerified =
           typeof token.emailVerified === 'number' ? new Date(token.emailVerified).toISOString() : null;
+      } else if (!token.id) {
+        // jwt callback returned an empty token to force re-auth; surface
+        // an empty session so downstream code treats this as logged out.
+        return { user: { id: '', email: '' }, expires: new Date(0).toISOString() } as typeof session;
       }
       return session;
+    },
+  },
+  events: {
+    async signIn({ user }) {
+      if (user?.id) {
+        await recordAuthEvent({ kind: 'SIGNIN', userId: user.id });
+      }
+    },
+    async signOut({ token }) {
+      const userId = typeof token?.id === 'string' ? token.id : null;
+      await recordAuthEvent({ kind: 'SIGNOUT', userId });
     },
   },
   pages: {

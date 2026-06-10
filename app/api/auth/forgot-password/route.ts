@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { db } from '@/lib/database/db';
 import { passwordResetTokens, users } from '@/lib/database/schema';
 import { generateToken, hashToken } from '@/lib/auth/tokens';
+import { recordAuthEvent } from '@/lib/auth/audit';
 import { sendEmail } from '@/lib/email/send';
 import { passwordResetEmail } from '@/lib/email/templates';
 import { enforceRateLimit, ipKey } from '@/lib/security/rate-limit';
@@ -54,6 +55,7 @@ export async function POST(req: NextRequest) {
     const resetUrl = `${req.nextUrl.origin}/reset-password?token=${rawToken}`;
     const msg = passwordResetEmail(resetUrl);
     await sendEmail({ to: email, ...msg });
+    await recordAuthEvent({ kind: 'PASSWORD_RESET_REQUESTED', userId: user.id, req });
   }
 
   return NextResponse.json({ ok: true });

@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/lib/database/db';
 import { emailVerificationTokens, users } from '@/lib/database/schema';
 import { hashToken } from '@/lib/auth/tokens';
+import { recordAuthEvent } from '@/lib/auth/audit';
 
 function back(req: NextRequest, status: string): NextResponse {
   const url = new URL('/verify-email', req.url);
@@ -31,6 +32,7 @@ export async function GET(req: NextRequest) {
     .update(users)
     .set({ emailVerified: now, updatedAt: now })
     .where(eq(users.id, record.userId));
+  await recordAuthEvent({ kind: 'EMAIL_VERIFIED', userId: record.userId, req });
 
   return back(req, 'success');
 }

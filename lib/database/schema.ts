@@ -29,10 +29,40 @@ export const users = pgTable('User', {
   image: varchar('image'),
   avatarUrl: varchar('avatarUrl'),
   passwordHash: varchar('passwordHash'),
+  // Bumped whenever the password changes (reset, in-app change). Embedded
+  // into the JWT on issuance so the jwt callback can refuse tokens that
+  // pre-date the latest password change — effective session rotation with
+  // a JWT-strategy NextAuth setup.
+  passwordChangedAt: timestamp('passwordChangedAt', { mode: 'date' }),
   createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
   updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull().defaultNow(),
 }, (t) => ({
   emailIdx: index('User_email_idx').on(t.email),
+}));
+
+export const authEventKindEnum = pgEnum('AuthEventKind', [
+  'SIGNUP',
+  'SIGNIN',
+  'SIGNIN_FAILED',
+  'SIGNOUT',
+  'PASSWORD_RESET_REQUESTED',
+  'PASSWORD_RESET_COMPLETED',
+  'EMAIL_VERIFIED',
+]);
+
+export const authEvents = pgTable('AuthEvent', {
+  id: varchar('id').primaryKey().$defaultFn(cuid),
+  // Nullable so SIGNIN_FAILED for an unknown email still records.
+  userId: varchar('userId').references(() => users.id, { onDelete: 'set null' }),
+  kind: authEventKindEnum('kind').notNull(),
+  ip: varchar('ip'),
+  userAgent: varchar('userAgent'),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
+}, (t) => ({
+  userIdx: index('AuthEvent_userId_idx').on(t.userId),
+  kindIdx: index('AuthEvent_kind_idx').on(t.kind),
+  createdAtIdx: index('AuthEvent_createdAt_idx').on(t.createdAt),
 }));
 
 // ─── NextAuth adapter tables ──────────────────────────────────────────────────
@@ -508,3 +538,6 @@ export type MonthlyUsageCounter = typeof monthlyUsageCounters.$inferSelect;
 export type NewMonthlyUsageCounter = typeof monthlyUsageCounters.$inferInsert;
 export type RateLimitBucket = typeof rateLimitBuckets.$inferSelect;
 export type NewRateLimitBucket = typeof rateLimitBuckets.$inferInsert;
+export type AuthEvent = typeof authEvents.$inferSelect;
+export type NewAuthEvent = typeof authEvents.$inferInsert;
+export type AuthEventKind = (typeof authEventKindEnum.enumValues)[number];

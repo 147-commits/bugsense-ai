@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { db } from '@/lib/database/db';
 import { passwordResetTokens, users } from '@/lib/database/schema';
 import { hashToken } from '@/lib/auth/tokens';
+import { recordAuthEvent } from '@/lib/auth/audit';
 import { enforceRateLimit, ipKey } from '@/lib/security/rate-limit';
 import { requireSameOrigin } from '@/lib/security/same-origin';
 import { safeRoute } from '@/lib/security/safe-route';
@@ -44,12 +45,13 @@ export async function POST(req: NextRequest) {
   const now = new Date();
   await db
     .update(users)
-    .set({ passwordHash, updatedAt: now })
+    .set({ passwordHash, passwordChangedAt: now, updatedAt: now })
     .where(eq(users.id, record.userId));
   await db
     .update(passwordResetTokens)
     .set({ usedAt: now })
     .where(eq(passwordResetTokens.id, record.id));
+  await recordAuthEvent({ kind: 'PASSWORD_RESET_COMPLETED', userId: record.userId, req });
 
   return NextResponse.json({ ok: true });
   });

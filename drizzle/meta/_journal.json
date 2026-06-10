@@ -36,6 +36,13 @@
       "when": 1779470503126,
       "tag": "0004_light_sprite",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1781108720819,
+      "tag": "0005_silky_supernaut",
+      "breakpoints": true
     }
   ]
 }

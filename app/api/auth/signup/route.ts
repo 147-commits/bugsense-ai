@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { db } from '@/lib/database/db';
 import { emailVerificationTokens, users } from '@/lib/database/schema';
 import { generateToken, hashToken } from '@/lib/auth/tokens';
+import { recordAuthEvent } from '@/lib/auth/audit';
 import { sendEmail } from '@/lib/email/send';
 import { verificationEmail } from '@/lib/email/templates';
 import { enforceRateLimit, ipKey } from '@/lib/security/rate-limit';
@@ -64,6 +65,7 @@ export async function POST(req: NextRequest) {
   const verifyUrl = `${origin}/api/auth/verify-email?token=${rawToken}`;
   const msg = verificationEmail(verifyUrl);
   const send = await sendEmail({ to: normalizedEmail, ...msg });
+  await recordAuthEvent({ kind: 'SIGNUP', userId: user.id, req });
 
   return NextResponse.json(
     {
