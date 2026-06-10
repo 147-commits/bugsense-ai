@@ -87,7 +87,7 @@ export default function SignupPage() {
           aria-live="polite"
           className="px-3 py-3 rounded-lg bg-accent-emerald/10 text-accent-emerald text-sm"
         >
-          Check your inbox for a sign-in link. (If you don&apos;t have email configured locally, the link is printed to the server console.)
+          Check your inbox for the sign-in link.
         </div>
       ) : (
         <form onSubmit={handleSubmit} aria-busy={loading !== null} className="flex flex-col gap-3">

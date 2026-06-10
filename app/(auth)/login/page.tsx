@@ -93,13 +93,13 @@ function LoginForm() {
 
       {signedUpEmail && !formError && (
         <div role="status" aria-live="polite" className="mb-4 px-3 py-2.5 rounded-lg bg-accent-emerald/10 text-accent-emerald text-sm">
-          Account created. We sent a verification link to {signedUpEmail}.
+          Account created. Sign in below to continue.
         </div>
       )}
 
       {showVerifyRequest && (
         <div role="status" aria-live="polite" className="mb-4 px-3 py-2.5 rounded-lg bg-accent-emerald/10 text-accent-emerald text-sm">
-          Check your email for a sign-in link. If you do not have email configured locally, the link is printed to the server console.
+          Check your inbox for the sign-in link.
         </div>
       )}
 

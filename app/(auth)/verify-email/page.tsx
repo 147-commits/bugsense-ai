@@ -31,7 +31,7 @@ const COPY: Record<Status, { title: string; body: string; cta: { label: string; 
   },
   sent: {
     title: 'Check your email',
-    body: 'We sent a verification link to your inbox. Click it to activate your account. If you do not have email configured locally, the link is printed to the server console.',
+    body: 'We sent a verification link to your inbox. Click it to activate your account.',
     cta: { label: 'Back to sign in', href: '/login' },
   },
   unknown: {

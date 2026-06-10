@@ -3,11 +3,8 @@ import bcrypt from 'bcryptjs';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/lib/database/db';
-import { emailVerificationTokens, users } from '@/lib/database/schema';
-import { generateToken, hashToken } from '@/lib/auth/tokens';
+import { users } from '@/lib/database/schema';
 import { recordAuthEvent } from '@/lib/auth/audit';
-import { sendEmail } from '@/lib/email/send';
-import { verificationEmail } from '@/lib/email/templates';
 import { enforceRateLimit, ipKey } from '@/lib/security/rate-limit';
 import { requireSameOrigin } from '@/lib/security/same-origin';
 import { safeRoute } from '@/lib/security/safe-route';
@@ -18,8 +15,6 @@ const SignupSchema = z.object({
   email: z.string().email().max(254),
   password: z.string().min(8).max(200),
 });
-
-const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 
 export async function POST(req: NextRequest) {
   return safeRoute('auth/signup', async () => {
@@ -41,12 +36,19 @@ export async function POST(req: NextRequest) {
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
+  // Email verification is intentionally bypassed for now — new users are
+  // marked verified at signup so they can use the workspace immediately.
+  // The verification token table, /api/auth/verify-email handler, the
+  // middleware gate, and the UnverifiedEmailBanner all remain in place
+  // so re-enabling verification later is a one-line flip (drop the
+  // `emailVerified` field below + restore the token-issuance block).
   const [user] = await db
     .insert(users)
     .values({
       email: normalizedEmail,
       name: name?.trim() || null,
       passwordHash,
+      emailVerified: new Date(),
     })
     .returning({ id: users.id });
 
@@ -54,28 +56,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Could not create account.' }, { status: 500 });
   }
 
-  const rawToken = generateToken();
-  await db.insert(emailVerificationTokens).values({
-    userId: user.id,
-    tokenHash: hashToken(rawToken),
-    expiresAt: new Date(Date.now() + VERIFICATION_TTL_MS),
-  });
-
-  const origin = req.nextUrl.origin;
-  const verifyUrl = `${origin}/api/auth/verify-email?token=${rawToken}`;
-  const msg = verificationEmail(verifyUrl);
-  const send = await sendEmail({ to: normalizedEmail, ...msg });
   await recordAuthEvent({ kind: 'SIGNUP', userId: user.id, req });
 
-  return NextResponse.json(
-    {
-      ok: true,
-      emailSent: send.delivered,
-      // Surface "logged" so the dev console message is the obvious source
-      // when RESEND_API_KEY isn't configured locally.
-      emailLogged: send.reason === 'no_api_key',
-    },
-    { status: 201 },
-  );
+  return NextResponse.json({ ok: true }, { status: 201 });
   });
 }
