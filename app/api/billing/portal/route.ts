@@ -4,8 +4,11 @@ import { requireAuth } from '@/lib/auth/requireAuth';
 import { db } from '@/lib/database/db';
 import { organizationMembers } from '@/lib/database/schema';
 import { getStripe, isBillingEnabled, isDryRun, logDryRun } from '@/lib/billing/client';
+import { requireSameOrigin } from '@/lib/security/same-origin';
 
 export async function POST(req: NextRequest) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;
   if (!isBillingEnabled()) {

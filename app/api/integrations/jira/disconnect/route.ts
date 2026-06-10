@@ -1,11 +1,14 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { requireAuth } from '@/lib/auth/requireAuth';
 import { db } from '@/lib/database/db';
 import { integrations, organizationMembers } from '@/lib/database/schema';
 import { demoModeResponse } from '@/lib/validation';
+import { requireSameOrigin } from '@/lib/security/same-origin';
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;
   if (!db) return demoModeResponse('Disconnecting Jira requires a configured database.');

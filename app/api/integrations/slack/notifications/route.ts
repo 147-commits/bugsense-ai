@@ -6,6 +6,7 @@ import { db } from '@/lib/database/db';
 import { integrations, organizationMembers } from '@/lib/database/schema';
 import { DEFAULT_SLACK_NOTIFICATIONS, parseSlackConfig, type SlackConfig } from '@/types/slack';
 import { demoModeResponse, parseBody } from '@/lib/validation';
+import { requireSameOrigin } from '@/lib/security/same-origin';
 
 const NotificationsSchema = z.object({
   critical_bug: z.boolean(),
@@ -15,6 +16,8 @@ const NotificationsSchema = z.object({
 });
 
 export async function PUT(req: NextRequest) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;
   if (!db) return demoModeResponse('Saving Slack notification settings requires a configured database.');

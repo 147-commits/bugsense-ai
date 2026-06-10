@@ -6,6 +6,7 @@ import { db } from '@/lib/database/db';
 import { integrations, organizationMembers } from '@/lib/database/schema';
 import { DEFAULT_JIRA_MAPPINGS, parseJiraConfig, type JiraConfig } from '@/types/jira';
 import { demoModeResponse, parseBody } from '@/lib/validation';
+import { requireSameOrigin } from '@/lib/security/same-origin';
 
 const StatusKeySchema = z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'DUPLICATE']);
 const PriorityKeySchema = z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']);
@@ -50,6 +51,8 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;
   const ctx = await loadIntegration(auth.user.id);

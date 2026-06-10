@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/lib/database/db';
 import { passwordResetTokens, users } from '@/lib/database/schema';
@@ -7,6 +7,7 @@ import { generateToken, hashToken } from '@/lib/auth/tokens';
 import { sendEmail } from '@/lib/email/send';
 import { passwordResetEmail } from '@/lib/email/templates';
 import { enforceRateLimit, ipKey } from '@/lib/security/rate-limit';
+import { requireSameOrigin } from '@/lib/security/same-origin';
 import { safeRoute } from '@/lib/security/safe-route';
 import { demoModeResponse, parseBody } from '@/lib/validation';
 
@@ -18,6 +19,8 @@ const RESET_TTL_MS = 60 * 60 * 1000;
 
 export async function POST(req: NextRequest) {
   return safeRoute('auth/forgot-password', async () => {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
   const limited = await enforceRateLimit({ key: ipKey(req), limit: 10 });
   if (limited) return limited;
 
@@ -35,6 +38,13 @@ export async function POST(req: NextRequest) {
   // Only send email when the account exists AND uses password auth. Always
   // return the same shape so an attacker cannot enumerate registered emails.
   if (user?.passwordHash) {
+    // Burn any prior unused tokens so a leaked link from an earlier request
+    // cannot be redeemed once the user has asked for a fresh one.
+    await db
+      .update(passwordResetTokens)
+      .set({ usedAt: new Date() })
+      .where(and(eq(passwordResetTokens.userId, user.id), isNull(passwordResetTokens.usedAt)));
+
     const rawToken = generateToken();
     await db.insert(passwordResetTokens).values({
       userId: user.id,

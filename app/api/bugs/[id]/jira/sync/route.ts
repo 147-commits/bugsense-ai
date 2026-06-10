@@ -5,6 +5,7 @@ import { db } from '@/lib/database/db';
 import { pushBugToJira, SyncDryRunError, SyncNotConfiguredError } from '@/lib/jira/sync-out';
 import { demoModeResponse, parseParams } from '@/lib/validation';
 import { logger } from '@/lib/observability/logger';
+import { requireSameOrigin } from '@/lib/security/same-origin';
 
 const ParamsSchema = z.object({
   id: z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/),
@@ -13,6 +14,8 @@ const ParamsSchema = z.object({
 type Ctx = { params: { id: string } };
 
 export async function POST(req: NextRequest, { params }: Ctx) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;
   if (!db) return demoModeResponse('Syncing to Jira requires a configured database.');

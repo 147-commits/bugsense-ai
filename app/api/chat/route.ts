@@ -9,6 +9,7 @@ import { resolveOrganizationId } from '@/lib/billing/org-resolver';
 import { withAiQuota } from '@/lib/billing/with-quota';
 import { parseBody } from '@/lib/validation';
 import { logger } from '@/lib/observability/logger';
+import { requireSameOrigin } from '@/lib/security/same-origin';
 
 const ChatSchema = z.object({
   bugReportId: z.string().min(1).max(128).optional(),
@@ -26,6 +27,8 @@ const ChatSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;
 

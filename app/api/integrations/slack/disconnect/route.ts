@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { decryptToken } from '@/lib/crypto/tokens';
 import { requireAuth } from '@/lib/auth/requireAuth';
@@ -8,8 +8,11 @@ import { revokeToken } from '@/lib/slack/oauth';
 import { parseSlackConfig, type SlackConfig } from '@/types/slack';
 import { demoModeResponse } from '@/lib/validation';
 import { logger } from '@/lib/observability/logger';
+import { requireSameOrigin } from '@/lib/security/same-origin';
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;
   if (!db) return demoModeResponse('Disconnecting Slack requires a configured database.');

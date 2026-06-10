@@ -1,12 +1,15 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { requireAuth } from '@/lib/auth/requireAuth';
 import { db } from '@/lib/database/db';
 import { organizationMembers } from '@/lib/database/schema';
 import { sendTestMessage } from '@/lib/slack/dispatcher';
 import { demoModeResponse } from '@/lib/validation';
+import { requireSameOrigin } from '@/lib/security/same-origin';
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;
   if (!db) return demoModeResponse('Sending a test message requires a configured database.');

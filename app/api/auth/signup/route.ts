@@ -8,6 +8,7 @@ import { generateToken, hashToken } from '@/lib/auth/tokens';
 import { sendEmail } from '@/lib/email/send';
 import { verificationEmail } from '@/lib/email/templates';
 import { enforceRateLimit, ipKey } from '@/lib/security/rate-limit';
+import { requireSameOrigin } from '@/lib/security/same-origin';
 import { safeRoute } from '@/lib/security/safe-route';
 import { demoModeResponse, parseBody } from '@/lib/validation';
 
@@ -21,6 +22,8 @@ const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 
 export async function POST(req: NextRequest) {
   return safeRoute('auth/signup', async () => {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
   const limited = await enforceRateLimit({ key: ipKey(req), limit: 10 });
   if (limited) return limited;
 

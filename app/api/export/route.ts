@@ -7,6 +7,7 @@ import { db } from '@/lib/database/db';
 import { bugReports } from '@/lib/database/schema';
 import { demoModeResponse, parseBody } from '@/lib/validation';
 import { logger } from '@/lib/observability/logger';
+import { requireSameOrigin } from '@/lib/security/same-origin';
 
 const ExportSchema = z.object({
   platform: z.enum(['jira', 'github']),
@@ -14,6 +15,8 @@ const ExportSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
   const auth = await requireAuth();
   if (auth instanceof NextResponse) return auth;
 

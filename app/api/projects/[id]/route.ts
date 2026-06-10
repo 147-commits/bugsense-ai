@@ -6,6 +6,7 @@ import { authOptions } from '@/lib/auth/authOptions';
 import { db, type DB } from '@/lib/database/db';
 import { projects, projectMembers, bugReports } from '@/lib/database/schema';
 import { demoModeResponse, parseBody, parseParams } from '@/lib/validation';
+import { requireSameOrigin } from '@/lib/security/same-origin';
 
 const ParamsSchema = z.object({
   id: z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/),
@@ -55,6 +56,8 @@ async function withCounts(dbConn: DB, projectId: string) {
 // ── PATCH /api/projects/[id] ──────────────────────────────────────────────────
 
 export async function PATCH(req: NextRequest, { params }: Ctx) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -84,7 +87,9 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 
 // ── DELETE /api/projects/[id] ─────────────────────────────────────────────────
 
-export async function DELETE(_req: NextRequest, { params }: Ctx) {
+export async function DELETE(req: NextRequest, { params }: Ctx) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 

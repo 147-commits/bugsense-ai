@@ -13,6 +13,7 @@ import {
   bugReports,
 } from '@/lib/database/schema';
 import { demoModeResponse, parseBody } from '@/lib/validation';
+import { requireSameOrigin } from '@/lib/security/same-origin';
 
 const CreateProjectSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -116,6 +117,8 @@ export async function GET() {
 // ── POST /api/projects ────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  const csrf = requireSameOrigin(req);
+  if (csrf) return csrf;
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
