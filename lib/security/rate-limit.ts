@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { NextResponse, type NextRequest } from 'next/server';
 import { db } from '@/lib/database/db';
 import { rateLimitBuckets } from '@/lib/database/schema';
+import { logger } from '@/lib/observability/logger';
 
 const BUCKET_MS = 60_000;
 
@@ -47,10 +48,7 @@ export async function enforceRateLimit(opts: {
     // (migration not applied), a connection blip, or any other Postgres
     // hiccup must not be allowed to break authentication. The incident
     // shows up in logs and Sentry instead.
-    console.warn(
-      '[rate-limit] check failed, allowing request:',
-      err instanceof Error ? err.message : err,
-    );
+    logger.warn('rate-limit check failed, allowing request', { key: opts.key, limit: opts.limit }, err);
     return null;
   }
 }

@@ -1,6 +1,7 @@
 import { Pool, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
 import ws from 'ws';
+import { logger } from '@/lib/observability/logger';
 import * as schema from './schema';
 
 if (typeof globalThis.WebSocket === 'undefined') {
@@ -13,8 +14,7 @@ let warned = false;
 function warnOnce(reason: string): void {
   if (warned) return;
   warned = true;
-  // eslint-disable-next-line no-console
-  console.warn(`[db] ${reason} — running in demo mode. DB-backed routes will return mock data or 503.`);
+  logger.warn('db running in demo mode — DB-backed routes will return mock data or 503', { reason });
 }
 
 function initDb(): DB | null {
@@ -30,8 +30,7 @@ function initDb(): DB | null {
     // in-flight query still rejects, so route handlers surface a clean error
     // instead of the process dying.
     pool.on('error', (err: Error) => {
-      // eslint-disable-next-line no-console
-      console.error(`[db] pool error (check DATABASE_URL credentials/host): ${err.message}`);
+      logger.error('db pool error (check DATABASE_URL credentials/host)', err);
     });
     return drizzle(pool, { schema });
   } catch (err) {

@@ -206,8 +206,8 @@ function ProjectModal({
   const set = (patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch }));
   const isEdit = !!initial;
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  async function submit(e?: React.FormEvent | React.MouseEvent) {
+    e?.preventDefault();
     await onSave(form);
   }
 
@@ -345,7 +345,7 @@ function ProjectModal({
             Cancel
           </button>
           <button
-            onClick={(e) => { e.preventDefault(); submit(e as unknown as React.FormEvent); }}
+            onClick={(e) => submit(e)}
             className="btn-primary"
             disabled={saving || !form.name.trim()}
           >
