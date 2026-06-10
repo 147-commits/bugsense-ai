@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/auth/requireAuth';
 import { db } from '@/lib/database/db';
 import { pushBugToJira, SyncDryRunError, SyncNotConfiguredError } from '@/lib/jira/sync-out';
 import { demoModeResponse, parseParams } from '@/lib/validation';
+import { logger } from '@/lib/observability/logger';
 
 const ParamsSchema = z.object({
   id: z.string().min(1).max(128).regex(/^[A-Za-z0-9_-]+$/),
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     if (err instanceof SyncDryRunError) {
       return NextResponse.json({ dryRun: true, message: err.message });
     }
-    console.error('[bugs/jira/sync]', err instanceof Error ? err.message : err);
+    logger.error('bugs/jira sync failed', { bugId: parsed.data.id }, err);
     return NextResponse.json({ error: 'Sync to Jira failed.' }, { status: 502 });
   }
 }

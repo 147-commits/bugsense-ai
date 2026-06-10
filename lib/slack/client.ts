@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from '@/lib/utils/fetch-with-timeout';
+
 const POST_URL = 'https://slack.com/api/chat.postMessage';
 
 export class SlackClientError extends Error {}
@@ -11,7 +13,7 @@ export interface PostMessageInput {
 }
 
 export async function postMessage(input: PostMessageInput): Promise<void> {
-  const res = await fetch(POST_URL, {
+  const res = await fetchWithTimeout(POST_URL, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${input.accessToken}`,
@@ -22,6 +24,7 @@ export async function postMessage(input: PostMessageInput): Promise<void> {
       blocks: input.blocks,
       text: input.text,
     }),
+    timeoutMs: 10_000,
   });
   if (!res.ok) {
     throw new SlackClientError(`Slack chat.postMessage HTTP ${res.status}: ${await res.text()}`);

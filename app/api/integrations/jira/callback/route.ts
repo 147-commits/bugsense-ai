@@ -5,6 +5,7 @@ import { integrations } from '@/lib/database/schema';
 import { exchangeCode, generateWebhookSecret, verifyState } from '@/lib/jira/oauth';
 import { DEFAULT_JIRA_MAPPINGS, parseJiraConfig, type JiraConfig } from '@/types/jira';
 import { demoModeResponse } from '@/lib/validation';
+import { logger } from '@/lib/observability/logger';
 
 function redirect(req: NextRequest, params: Record<string, string>): NextResponse {
   const url = new URL('/settings', req.url);
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest) {
   try {
     exchange = await exchangeCode(code);
   } catch (err) {
-    console.error('[jira/callback] token exchange failed:', err instanceof Error ? err.message : err);
+    logger.error('jira callback token exchange failed', err);
     return redirect(req, { jira: 'error', reason: 'exchange_failed' });
   }
   const resource = exchange.resources[0];

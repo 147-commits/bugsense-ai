@@ -17,6 +17,7 @@ import { tryNotifyCriticalBug } from '@/lib/slack/dispatcher';
 import { resolveOrganizationId } from '@/lib/billing/org-resolver';
 import { withAiQuota } from '@/lib/billing/with-quota';
 import { parseBody } from '@/lib/validation';
+import { logger } from '@/lib/observability/logger';
 
 type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
 type Priority = 'P0' | 'P1' | 'P2' | 'P3' | 'P4';
@@ -156,7 +157,7 @@ export async function POST(req: NextRequest) {
       demoMode: !db && !!projectId,
     });
   } catch (error) {
-    console.error('Analysis error:', error);
+    logger.error('bug analysis failed', error);
     return NextResponse.json(
       { error: 'Failed to analyze bug report. Please try again.' },
       { status: 500 },

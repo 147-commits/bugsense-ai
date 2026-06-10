@@ -1,4 +1,5 @@
 import Stripe from 'stripe';
+import { logger } from '@/lib/observability/logger';
 
 let cached: Stripe | null = null;
 
@@ -27,10 +28,7 @@ export function isDryRun(): boolean {
 
 /** Standardised one-line log for dry-run output. */
 export function logDryRun(method: string, endpoint: string, payload: unknown): void {
-  console.warn(
-    `[stripe] DRY_RUN ${method} ${endpoint}`,
-    JSON.stringify(redact(payload)),
-  );
+  logger.warn('stripe DRY_RUN', { method, endpoint, payload: redact(payload) });
 }
 
 function redact(value: unknown): unknown {

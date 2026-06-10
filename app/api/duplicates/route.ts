@@ -8,6 +8,7 @@ import { bugReports } from '@/lib/database/schema';
 import { resolveOrganizationId } from '@/lib/billing/org-resolver';
 import { withAiQuota } from '@/lib/billing/with-quota';
 import { parseBody } from '@/lib/validation';
+import { logger } from '@/lib/observability/logger';
 
 const DuplicatesSchema = z.object({
   title: z.string().min(1).max(500),
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ...result, demoMode: !db });
   } catch (error) {
-    console.error('Duplicate detection error:', error);
+    logger.error('duplicate detection failed', error);
     return NextResponse.json({ error: 'Failed to detect duplicates' }, { status: 500 });
   }
   });

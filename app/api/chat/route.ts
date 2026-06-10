@@ -8,6 +8,7 @@ import { bugReports, chatMessages } from '@/lib/database/schema';
 import { resolveOrganizationId } from '@/lib/billing/org-resolver';
 import { withAiQuota } from '@/lib/billing/with-quota';
 import { parseBody } from '@/lib/validation';
+import { logger } from '@/lib/observability/logger';
 
 const ChatSchema = z.object({
   bugReportId: z.string().min(1).max(128).optional(),
@@ -63,7 +64,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ response, projectId, demoMode: !db });
   } catch (error) {
-    console.error('Chat error:', error);
+    logger.error('chat generation failed', error);
     return NextResponse.json({ error: 'Failed to generate response' }, { status: 500 });
   }
   });

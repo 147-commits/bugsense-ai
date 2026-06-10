@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { encryptToken } from '@/lib/crypto/tokens';
+import { fetchWithTimeout } from '@/lib/utils/fetch-with-timeout';
 import type { JiraOAuthTokens } from '@/types/jira';
 
 export { decryptToken, encryptToken } from '@/lib/crypto/tokens';
@@ -66,7 +67,7 @@ export async function exchangeCode(code: string): Promise<{
 }> {
   const env = readOAuthEnv();
   if (!env) throw new Error('JIRA OAuth env missing');
-  const res = await fetch(TOKEN_URL, {
+  const res = await fetchWithTimeout(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({
@@ -76,6 +77,7 @@ export async function exchangeCode(code: string): Promise<{
       code,
       redirect_uri: env.redirectUri,
     }),
+    timeoutMs: 10_000,
   });
   if (!res.ok) {
     throw new Error(`Token exchange failed: ${res.status} ${await res.text()}`);
@@ -88,7 +90,7 @@ export async function exchangeCode(code: string): Promise<{
 export async function refreshTokens(refreshToken: string): Promise<JiraOAuthTokens> {
   const env = readOAuthEnv();
   if (!env) throw new Error('JIRA OAuth env missing');
-  const res = await fetch(TOKEN_URL, {
+  const res = await fetchWithTimeout(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({
@@ -97,6 +99,7 @@ export async function refreshTokens(refreshToken: string): Promise<JiraOAuthToke
       client_secret: env.clientSecret,
       refresh_token: refreshToken,
     }),
+    timeoutMs: 10_000,
   });
   if (!res.ok) {
     throw new Error(`Token refresh failed: ${res.status} ${await res.text()}`);
@@ -114,8 +117,9 @@ function tokensFromResponse(data: AtlassianTokenResponse): JiraOAuthTokens {
 }
 
 async function fetchAccessibleResources(accessToken: string): Promise<AccessibleResource[]> {
-  const res = await fetch(RESOURCES_URL, {
+  const res = await fetchWithTimeout(RESOURCES_URL, {
     headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+    timeoutMs: 10_000,
   });
   if (!res.ok) {
     throw new Error(`accessible-resources failed: ${res.status} ${await res.text()}`);

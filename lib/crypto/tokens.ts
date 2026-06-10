@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { logger } from '@/lib/observability/logger';
 
 const PRIMARY = process.env.TOKEN_ENC_KEY;
 const FALLBACK = process.env.JIRA_TOKEN_ENC_KEY;
@@ -17,9 +18,7 @@ if (PRIMARY && FALLBACK && PRIMARY !== FALLBACK) {
 let fallbackWarned = false;
 if (!PRIMARY && FALLBACK && !fallbackWarned) {
   fallbackWarned = true;
-  console.warn(
-    '[crypto] JIRA_TOKEN_ENC_KEY is deprecated, rename to TOKEN_ENC_KEY. Falling back for now.',
-  );
+  logger.warn('JIRA_TOKEN_ENC_KEY is deprecated, rename to TOKEN_ENC_KEY. Falling back for now.');
 }
 
 function getEncKey(): Buffer {

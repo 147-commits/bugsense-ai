@@ -7,6 +7,7 @@ import { generatedContent } from '@/lib/database/schema';
 import { resolveOrganizationId } from '@/lib/billing/org-resolver';
 import { withAiQuota } from '@/lib/billing/with-quota';
 import { parseBody } from '@/lib/validation';
+import { logger } from '@/lib/observability/logger';
 
 const TestGenSchema = z.object({
   userStory: z.string().min(1).max(10_000),
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ...result, demoMode: !db && !!projectId });
   } catch (error) {
-    console.error('Test gen error:', error);
+    logger.error('test-gen failed', error);
     return NextResponse.json({ error: 'Failed to generate test cases' }, { status: 500 });
   }
   });

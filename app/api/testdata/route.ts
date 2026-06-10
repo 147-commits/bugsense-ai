@@ -7,6 +7,7 @@ import { generatedContent } from '@/lib/database/schema';
 import { resolveOrganizationId } from '@/lib/billing/org-resolver';
 import { withAiQuota } from '@/lib/billing/with-quota';
 import { parseBody } from '@/lib/validation';
+import { logger } from '@/lib/observability/logger';
 
 const TestDataSchema = z.object({
   scenario: z.string().min(1).max(10_000),
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ...result, demoMode: !db && !!projectId });
   } catch (error) {
-    console.error('Test data error:', error);
+    logger.error('test-data generation failed', error);
     return NextResponse.json({ error: 'Failed to generate test data' }, { status: 500 });
   }
   });

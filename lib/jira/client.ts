@@ -1,3 +1,4 @@
+import { fetchWithTimeout } from '@/lib/utils/fetch-with-timeout';
 import { decryptToken, refreshTokens } from './oauth';
 import type { ADFDoc } from './adf';
 import type { JiraConfig } from '@/types/jira';
@@ -49,7 +50,11 @@ async function jiraFetch<T>(
     headers.set('Authorization', `Bearer ${client.config.tokens.accessToken}`);
     headers.set('Accept', 'application/json');
     if (init.body) headers.set('Content-Type', 'application/json');
-    return fetch(`https://api.atlassian.com/ex/jira/${client.cloudId}${path}`, { ...init, headers });
+    return fetchWithTimeout(`https://api.atlassian.com/ex/jira/${client.cloudId}${path}`, {
+      ...init,
+      headers,
+      timeoutMs: 15_000,
+    });
   };
 
   let res = await doFetch();

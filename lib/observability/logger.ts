@@ -59,15 +59,23 @@ function emit(payload: LogPayload): void {
   }
 }
 
-function log(level: LogLevel, msg: string, contextOrError?: LogContext | Error | unknown, error?: unknown): void {
+/**
+ * Internal — the second argument may be a structured context object, an
+ * Error, or anything thrown from a `catch (err: unknown)` block. We sort
+ * them out at runtime so callers don't have to narrow before logging.
+ */
+function log(level: LogLevel, msg: string, contextOrError?: unknown, error?: unknown): void {
   if (!shouldEmit(level)) return;
 
   let context: LogContext | undefined;
   let err: unknown = error;
   if (contextOrError instanceof Error) {
     err = contextOrError;
-  } else if (contextOrError && typeof contextOrError === 'object') {
+  } else if (contextOrError !== null && typeof contextOrError === 'object') {
     context = contextOrError as LogContext;
+  } else if (contextOrError !== undefined) {
+    // Non-Error, non-object throwables (strings, numbers, etc.) — surface as err.
+    err = contextOrError;
   }
 
   const ctx = getRequestContext();
@@ -85,9 +93,9 @@ function log(level: LogLevel, msg: string, contextOrError?: LogContext | Error |
 export const logger = {
   debug: (msg: string, context?: LogContext) => log('debug', msg, context),
   info: (msg: string, context?: LogContext) => log('info', msg, context),
-  warn: (msg: string, contextOrError?: LogContext | Error, error?: unknown) =>
+  warn: (msg: string, contextOrError?: LogContext | Error | unknown, error?: unknown) =>
     log('warn', msg, contextOrError, error),
-  error: (msg: string, contextOrError?: LogContext | Error, error?: unknown) =>
+  error: (msg: string, contextOrError?: LogContext | Error | unknown, error?: unknown) =>
     log('error', msg, contextOrError, error),
 };
 

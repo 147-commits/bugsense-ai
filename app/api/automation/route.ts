@@ -7,6 +7,7 @@ import { generatedContent } from '@/lib/database/schema';
 import { resolveOrganizationId } from '@/lib/billing/org-resolver';
 import { withAiQuota } from '@/lib/billing/with-quota';
 import { parseBody } from '@/lib/validation';
+import { logger } from '@/lib/observability/logger';
 
 const AutomationSchema = z.object({
   scenario: z.string().min(1).max(10_000),
@@ -57,7 +58,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ...result, demoMode: !db && !!projectId });
   } catch (error) {
-    console.error('Automation error:', error);
+    logger.error('automation generation failed', error);
     return NextResponse.json({ error: 'Failed to generate automation script' }, { status: 500 });
   }
   });

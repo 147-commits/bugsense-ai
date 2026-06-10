@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import { checkAiCallAllowed, recordAiCall } from '@/lib/billing/limits';
+import { logger } from '@/lib/observability/logger';
 import { AI_MODEL, getAnthropicClient } from './client';
 import { cacheGet, cacheKey, cacheSet } from './cache';
 import { getAiContext } from './context';
@@ -166,15 +167,12 @@ export async function runJsonAI<T>(opts: RunJsonOptions<T>): Promise<T> {
     cacheSet(key, validated);
     return validated;
   } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
     if (!firstRaw) {
       // Network, timeout, abort, or API error before any content was returned.
-      console.error(`[ai/${opts.name}] call failed (no response): ${reason}`);
+      logger.error('ai call failed (no response)', { name: opts.name }, err);
       return opts.mock();
     }
-    console.error(
-      `[ai/${opts.name}] attempt 1 invalid (${reason}); output=${truncate(firstRaw, 500)}`,
-    );
+    logger.error('ai attempt 1 invalid', { name: opts.name, output: truncate(firstRaw, 500) }, err);
   }
 
   // ── Attempt 2: explicit "JSON only" retry ───────────────────────────────
@@ -198,8 +196,7 @@ export async function runJsonAI<T>(opts: RunJsonOptions<T>): Promise<T> {
     cacheSet(key, validated);
     return validated;
   } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
-    console.error(`[ai/${opts.name}] retry failed: ${reason}`);
+    logger.error('ai retry failed', { name: opts.name }, err);
     return opts.mock();
   }
 }
@@ -244,8 +241,7 @@ export async function runTextAI(opts: RunTextOptions): Promise<string> {
     cacheSet(key, text);
     return text;
   } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
-    console.error(`[ai/${opts.name}] failed: ${reason}`);
+    logger.error('ai call failed', { name: opts.name }, err);
     return opts.mock();
   }
 }

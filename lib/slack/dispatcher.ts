@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { decryptToken } from '@/lib/crypto/tokens';
 import { db } from '@/lib/database/db';
 import { integrations, projects } from '@/lib/database/schema';
+import { logger } from '@/lib/observability/logger';
 import { parseSlackConfig, type SlackNotificationsConfig } from '@/types/slack';
 import { postMessage } from './client';
 import {
@@ -36,24 +37,21 @@ async function resolveTarget(organizationId: string, eventKey: EventKey): Promis
       teamName: cfg.team_name,
     };
   } catch (err) {
-    console.warn('[slack/dispatcher] decrypt failed:', err instanceof Error ? err.message : err);
+    logger.warn('slack dispatcher decrypt failed', { organizationId }, err);
     return null;
   }
 }
 
 async function safePost(target: ResolvedTarget, blocks: unknown[], fallback: string): Promise<boolean> {
   if (process.env.SLACK_DRY_RUN === '1') {
-    console.warn(
-      '[slack/dispatcher] SLACK_DRY_RUN payload:',
-      JSON.stringify({ channel: target.channelId, fallback, blocks }),
-    );
+    logger.warn('slack DRY_RUN payload', { channel: target.channelId, fallback, blocks });
     return true;
   }
   try {
     await postMessage({ accessToken: target.accessToken, channel: target.channelId, blocks, text: fallback });
     return true;
   } catch (err) {
-    console.warn('[slack/dispatcher] postMessage failed:', err instanceof Error ? err.message : err);
+    logger.warn('slack postMessage failed', { channel: target.channelId }, err);
     return false;
   }
 }
@@ -140,7 +138,7 @@ export async function sendTestMessage(organizationId: string): Promise<TestMessa
   }
 
   if (process.env.SLACK_DRY_RUN === '1') {
-    console.warn('[slack/dispatcher] SLACK_DRY_RUN test message to', cfg.channel_id);
+    logger.warn('slack DRY_RUN test message', { channel: cfg.channel_id });
     return { ok: true };
   }
 

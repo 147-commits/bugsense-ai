@@ -7,6 +7,7 @@ import { generatedContent } from '@/lib/database/schema';
 import { resolveOrganizationId } from '@/lib/billing/org-resolver';
 import { withAiQuota } from '@/lib/billing/with-quota';
 import { parseBody } from '@/lib/validation';
+import { logger } from '@/lib/observability/logger';
 
 const QADocsSchema = z.object({
   input: z.string().min(1).max(50_000),
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ...result, demoMode: !db && !!projectId });
   } catch (error) {
-    console.error('QA docs error:', error);
+    logger.error('qa-docs generation failed', error);
     return NextResponse.json({ error: 'Failed to generate documentation' }, { status: 500 });
   }
   });

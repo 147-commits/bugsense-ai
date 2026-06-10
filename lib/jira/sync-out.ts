@@ -8,6 +8,7 @@ import {
   type BugReport,
   type Integration,
 } from '@/lib/database/schema';
+import { logger } from '@/lib/observability/logger';
 import { parseJiraConfig, type JiraConfig } from '@/types/jira';
 import {
   addRemoteLink,
@@ -120,7 +121,7 @@ export async function pushBugToJira(bugId: string, opts: PushOptions = {}): Prom
           `BugSense: ${truncate(bug.title, 200)}`,
         );
       } catch (err) {
-        console.warn('[jira/sync] remote link failed:', err instanceof Error ? err.message : err);
+        logger.warn('jira remote link failed', { issueKey }, err);
       }
     }
   } else {
@@ -149,7 +150,7 @@ export async function pushBugToJira(bugId: string, opts: PushOptions = {}): Prom
         transitioned = true;
       }
     } catch (err) {
-      console.warn('[jira/sync] transition failed:', err instanceof Error ? err.message : err);
+      logger.warn('jira transition failed', { issueKey, statusName }, err);
     }
   }
 
@@ -186,9 +187,9 @@ export async function tryPushBugToJira(bugId: string, opts: PushOptions = {}): P
       return null;
     }
     if (err instanceof JiraError) {
-      console.warn('[jira/sync] Jira error on auto-push:', err.message);
+      logger.warn('jira auto-push: Jira error', { bugId }, err);
     } else {
-      console.warn('[jira/sync] auto-push failed:', err instanceof Error ? err.message : err);
+      logger.warn('jira auto-push failed', { bugId }, err);
     }
     return null;
   }

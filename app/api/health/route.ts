@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { sql } from 'drizzle-orm';
 import { db } from '@/lib/database/db';
 import { enforceRateLimit, ipKey } from '@/lib/security/rate-limit';
+import { logger } from '@/lib/observability/logger';
 
 // Explicit placeholder/dummy values rejected as "unconfigured" so a misfilled
 // .env doesn't silently look healthy. Matches the convention used by the AI
@@ -23,7 +24,7 @@ async function checkDatabase(): Promise<DbState> {
     await db.execute(sql`SELECT 1`);
     return 'up';
   } catch (err) {
-    console.warn('[health] db check failed:', err instanceof Error ? err.message : err);
+    logger.warn('health db check failed', err);
     return 'down';
   }
 }

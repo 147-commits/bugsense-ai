@@ -1,6 +1,7 @@
 import NextAuth from 'next-auth';
 import { NextResponse, type NextRequest } from 'next/server';
 import { authOptions } from '@/lib/auth/authOptions';
+import { logger } from '@/lib/observability/logger';
 
 const handler = NextAuth(authOptions);
 
@@ -18,10 +19,8 @@ async function safeNextAuth(req: NextRequest, ctx: Ctx): Promise<Response> {
   try {
     return await handler(req, ctx);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
     const segment = ctx.params.nextauth.join('/');
-    console.error(`[auth/${segment}] NextAuth handler threw:`, message);
-    if (err instanceof Error && err.stack) console.error(err.stack);
+    logger.error('NextAuth handler threw', { segment }, err);
     return NextResponse.json(
       {
         error: 'server_error',

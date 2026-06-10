@@ -6,6 +6,7 @@ import { integrations } from '@/lib/database/schema';
 import { exchangeCode, verifyState } from '@/lib/slack/oauth';
 import { DEFAULT_SLACK_NOTIFICATIONS, parseSlackConfig, type SlackConfig } from '@/types/slack';
 import { demoModeResponse } from '@/lib/validation';
+import { logger } from '@/lib/observability/logger';
 
 function back(req: NextRequest, params: Record<string, string>): NextResponse {
   const url = new URL('/settings', req.url);
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
   try {
     resp = await exchangeCode(code);
   } catch (err) {
-    console.error('[slack/callback] exchange failed:', err instanceof Error ? err.message : err);
+    logger.error('slack callback exchange failed', err);
     return back(req, { slack: 'error', reason: 'exchange_failed' });
   }
 

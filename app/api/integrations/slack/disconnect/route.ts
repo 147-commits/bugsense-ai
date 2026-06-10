@@ -7,6 +7,7 @@ import { integrations, organizationMembers } from '@/lib/database/schema';
 import { revokeToken } from '@/lib/slack/oauth';
 import { parseSlackConfig, type SlackConfig } from '@/types/slack';
 import { demoModeResponse } from '@/lib/validation';
+import { logger } from '@/lib/observability/logger';
 
 export async function POST() {
   const auth = await requireAuth();
@@ -45,7 +46,7 @@ export async function POST() {
       if (!result.ok) revokeError = result.error ?? 'unknown';
     } catch (err) {
       revokeError = err instanceof Error ? err.message : String(err);
-      console.warn('[slack/disconnect] revoke failed:', revokeError);
+      logger.warn('slack disconnect revoke failed', { revokeError }, err);
     }
   }
 

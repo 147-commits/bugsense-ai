@@ -6,6 +6,7 @@ import { requireAuth } from '@/lib/auth/requireAuth';
 import { db } from '@/lib/database/db';
 import { bugReports } from '@/lib/database/schema';
 import { demoModeResponse, parseBody } from '@/lib/validation';
+import { logger } from '@/lib/observability/logger';
 
 const ExportSchema = z.object({
   platform: z.enum(['jira', 'github']),
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
       message: `Bug report formatted for ${platform}. Copy the payload to create the issue.`,
     });
   } catch (error) {
-    console.error('Export error:', error);
+    logger.error('export failed', error);
     return NextResponse.json({ error: 'Failed to export' }, { status: 500 });
   }
 }

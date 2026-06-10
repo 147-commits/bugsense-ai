@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { fetchWithTimeout } from '@/lib/utils/fetch-with-timeout';
 
 const AUTH_URL = 'https://slack.com/oauth/v2/authorize';
 const TOKEN_URL = 'https://slack.com/api/oauth.v2.access';
@@ -64,13 +65,14 @@ export async function exchangeCode(code: string): Promise<SlackOAuthResponse> {
     code,
     redirect_uri: env.redirectUri,
   });
-  const res = await fetch(TOKEN_URL, {
+  const res = await fetchWithTimeout(TOKEN_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
       Accept: 'application/json',
     },
     body: params.toString(),
+    timeoutMs: 10_000,
   });
   if (!res.ok) {
     throw new Error(`Slack oauth.v2.access HTTP ${res.status}: ${await res.text()}`);
@@ -81,12 +83,13 @@ export async function exchangeCode(code: string): Promise<SlackOAuthResponse> {
 }
 
 export async function revokeToken(accessToken: string): Promise<{ ok: boolean; error?: string }> {
-  const res = await fetch(REVOKE_URL, {
+  const res = await fetchWithTimeout(REVOKE_URL, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/x-www-form-urlencoded',
     },
+    timeoutMs: 10_000,
   });
   if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
   return (await res.json()) as { ok: boolean; error?: string };
