@@ -111,7 +111,14 @@ export async function GET() {
   });
 
   const withCounts = await attachCounts(db, rows);
-  return NextResponse.json(withCounts);
+  // Short private cache absorbs the burst when the dashboard fans out to
+  // /api/projects + /api/bugs/stats on every render; mutating endpoints
+  // (POST/PATCH/DELETE below) return immediately uncached, so a fresh
+  // project shows up on the next dashboard load without the user noticing
+  // the 10s window.
+  const res = NextResponse.json(withCounts);
+  res.headers.set('Cache-Control', 'private, max-age=10');
+  return res;
 }
 
 // ── POST /api/projects ────────────────────────────────────────────────────────
