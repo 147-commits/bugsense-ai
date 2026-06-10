@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Bug, AlertTriangle, CheckCircle, Gauge, ArrowRight, RefreshCw } from 'lucide-react';
 import TopBar from '@/components/layout/TopBar';
 import { BugTrendChart, ModuleBarChart } from '@/components/charts/BugCharts';
+import GetStartedPanel from '@/components/onboarding/GetStartedPanel';
 import { useAppStore } from '@/lib/hooks/useStore';
 import { cn, severityColor, formatTimeAgo } from '@/lib/utils';
 import Link from 'next/link';
@@ -11,6 +12,7 @@ import type { DashboardStats } from '@/types';
 
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [projectCount, setProjectCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { currentProject } = useAppStore();
@@ -22,13 +24,20 @@ export default function DashboardPage() {
       const url = currentProject
         ? `/api/bugs/stats?projectId=${currentProject.id}`
         : '/api/bugs/stats';
-      const res = await fetch(url);
-      if (!res.ok) {
+      const [statsRes, projectsRes] = await Promise.all([
+        fetch(url),
+        fetch('/api/projects'),
+      ]);
+      if (!statsRes.ok) {
         setError('Could not load dashboard stats.');
         setStats(null);
         return;
       }
-      setStats(await res.json());
+      setStats(await statsRes.json());
+      if (projectsRes.ok) {
+        const list = (await projectsRes.json()) as unknown[];
+        setProjectCount(Array.isArray(list) ? list.length : 0);
+      }
     } catch {
       setError('Network error while loading dashboard stats.');
       setStats(null);
@@ -53,12 +62,21 @@ export default function DashboardPage() {
     : [];
 
   const hasAnyBugs = (stats?.totalBugs ?? 0) > 0;
+  const isFirstRun = !loading && stats !== null && projectCount === 0 && !hasAnyBugs;
 
   return (
     <div className="min-h-screen">
       <TopBar title="Dashboard" />
 
       <div className="p-6 space-y-5 max-w-[1200px] mx-auto">
+        {isFirstRun && (
+          <GetStartedPanel
+            hasProject={(projectCount ?? 0) > 0}
+            hasBug={hasAnyBugs}
+            hasTeammate={false}
+          />
+        )}
+
         {error && (
           <div
             role="alert"
