@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { authOptions } from '@/lib/auth/authOptions';
 import { db, type DB } from '@/lib/database/db';
@@ -74,13 +74,13 @@ async function attachCounts<T extends { id: string }>(dbConn: DB, rows: T[]) {
   const bugCounts = await dbConn
     .select({ projectId: bugReports.projectId, count: sql<number>`count(*)::int` })
     .from(bugReports)
-    .where(sql`${bugReports.projectId} = ANY(${ids})`)
+    .where(inArray(bugReports.projectId, ids))
     .groupBy(bugReports.projectId);
 
   const memberCounts = await dbConn
     .select({ projectId: projectMembers.projectId, count: sql<number>`count(*)::int` })
     .from(projectMembers)
-    .where(sql`${projectMembers.projectId} = ANY(${ids})`)
+    .where(inArray(projectMembers.projectId, ids))
     .groupBy(projectMembers.projectId);
 
   const bugMap = new Map(bugCounts.map((c) => [c.projectId, Number(c.count)]));
